@@ -7,8 +7,8 @@ sys.path.append(path)
 import torch
 from torch import nn
 from torch.nn.functional import relu, tanh
-from NN import encode, GeneralNet
-from siren import SIREN
+from .GINN.NN import encode, GeneralNet
+from .GINN.siren import SIREN
 from .utils import get_logger
 
 logger = get_logger()
