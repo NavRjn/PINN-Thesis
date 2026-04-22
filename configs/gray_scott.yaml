@@ -1,0 +1,30 @@
+problem: "gray_scott"
+
+# Network config
+arch: "SIREN+POSENC"
+use_two_models: true
+nx: 2
+ny: 2
+nz: 3
+
+# Domain config
+bounds: [0, 1, 0, 1]
+N: 64
+
+# Physics
+D1: 0.1
+D2: 0.05
+Fr: 0.028
+Kr: 0.057
+
+# Training config
+n_epochs: 20000
+lr: 0.001
+bz: 10
+sigma: 2.0
+method: "FD"   # FD or AD
+move_grid: true
+use_softclip: false
+w_grad: 0.0001
+metric_every: 50
+seed: 0
