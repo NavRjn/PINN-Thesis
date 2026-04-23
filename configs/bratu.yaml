@@ -1,0 +1,21 @@
+problem: bratu
+
+model:
+  name: PNN
+  units: 50
+  std: 1
+  factor: 1
+  ensemble_size: 1000
+
+training:
+  n_iters: 20000
+  lr: 0.001
+  save_freq: 1000
+
+data:
+  path: ./1d_bratu/data/data.mat
+
+output_dir: ./outputs/bratu
+device: cuda:0
+
+lambda_val: 1.0
