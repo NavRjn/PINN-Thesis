@@ -33,34 +33,40 @@ def main(config, run_dir):
     n_iters = config["training"].get("n", 1_000)
     pbar = trange(n_iters)
 
-    for i in pbar:
-        optimizer.zero_grad()
 
-        # Get training data/grid for this step
-        batch = grid_sampler()
+    try:
+        print("Starting loop: Interrupting now will save something")
+        for i in pbar:
+            optimizer.zero_grad()
 
-        # Calculate PDE Residual Loss
-        loss, loss_metrics = loss_fn(model, batch, config)
+            # Get training data/grid for this step
+            batch = grid_sampler()
 
-        loss.backward()
-        optimizer.step()
+            # Calculate PDE Residual Loss
+            loss, loss_metrics = loss_fn(model, batch, config)
 
-        # Logging
-        pbar.set_description(f"Loss: {loss.item():.2e}")
-        history['loss'].append(loss.item())
+            loss.backward()
+            optimizer.step()
 
-        if loss.item() < best_loss:
-            best_loss = loss.item()
-            logger.debug(f"New best loss: {best_loss:.2e} at iteration {i+1}")
-            torch.save(model.state_dict(), run_dir / "checkpoints" / "best.pt")
+            # Logging
+            pbar.set_description(f"Loss: {loss.item():.2e}")
+            history['loss'].append(loss.item())
 
-        # Checkpointing
-        # if i % config["training"].get("save_freq", 1000) == 0:
-        #     torch.save(model.state_dict(), run_dir / "checkpoints" / f"model_{i}.pt")
+            if loss.item() < best_loss:
+                best_loss = loss.item()
+                logger.debug(f"New best loss: {best_loss:.2e} at iteration {i+1}")
+                torch.save(model.state_dict(), run_dir / "checkpoints" / "best.pt")
 
-    # 4. Finalize & Problem-specific Visualization
-    torch.save(model.state_dict(), run_dir / "checkpoints" / "final.pt")
-    with open(run_dir / "losses.json", "w") as f:
-        json.dump(history, f)
+            # Checkpointing
+            # if i % config["training"].get("save_freq", 1000) == 0:
+            #     torch.save(model.state_dict(), run_dir / "checkpoints" / f"model_{i}.pt")
+    except KeyboardInterrupt:
+        logger.info("Training interrupted by user. Saving current state.")
+        print("\nTraining interrupted by user. Saving current state.")
+    finally:
+        # 4. Finalize & Problem-specific Visualization
+        torch.save(model.state_dict(), run_dir / "checkpoints" / "final.pt")
+        with open(run_dir / "losses.json", "w") as f:
+            json.dump(history, f)
 
-    problem_module.post_process(model, history, run_dir, device)
+        problem_module.post_process(model, history, run_dir, device)

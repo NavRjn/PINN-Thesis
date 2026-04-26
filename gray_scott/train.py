@@ -24,42 +24,46 @@ def main(config, run_dir):
     logger.info(f"Starting Gray-Scott training run in {run_dir}")
     logger.debug(f"Config: {config}")
 
+    model_cfg = config["model"]
+    physics_cfg = config["physics"]
+    train_cfg = config["training"]
+
     device = get_device()
     logger.info(f"Using device: {device}")
-    torch.manual_seed(config.get("seed", 0))
+    torch.manual_seed(train_cfg.get("seed", 0))
 
     # Architecture configuration
-    arch = config["arch"]
-    use_two_models = config["use_two_models"]
-    nz, nx, ny = config["nz"], config["nx"], config["ny"]
+    arch = model_cfg["arch"]
+    use_two_models = model_cfg.get("name", "DualNet") == "DualNet"
+    nz, nx, ny = model_cfg["nz"], model_cfg["nx"], model_cfg["ny"]
 
     # Domain configuration
-    bounds = config["bounds"]
-    N = config["N"]
+    bounds = physics_cfg["bounds"]
+    N = physics_cfg["grid_N"]
     N0, N1 = N, N
 
     # Physics configuration (Correct Laplacian Scale)
-    D1 = config["D1"] / (N * N)
-    D2 = config["D2"] / (N * N)
-    Fr = config["Fr"]
-    Kr = config["Kr"]
+    D1 = physics_cfg["D1"] / (N * N)
+    D2 = physics_cfg["D2"] / (N * N)
+    Fr = physics_cfg["Fr"]
+    Kr = physics_cfg["Kr"]
 
     # Initialize Model & Operator Utils
     logger.info(f"Initializing model with architecture {arch}")
     model = init_model(arch=arch, use_two_models=use_two_models, nz=nz, nx=nx).to(device)
     params = dict(model.named_parameters())
     v_laplacian, vf_x, vf_z = get_ad_operators(model)
-    opt = torch.optim.Adam(model.parameters(), lr=config["lr"])
+    opt = torch.optim.Adam(model.parameters(), lr=train_cfg["lr"])
 
     # Training config
-    n_epochs = config["n_epochs"]
-    bz = config["bz"]
-    sigma = config["sigma"]
-    method = config["method"]
-    move_grid = config["move_grid"]
-    use_softclip = config["use_softclip"]
-    w_grad = config["w_grad"]
-    metric_every = config["metric_every"]
+    n_epochs = train_cfg["n"]
+    bz = train_cfg["bz"]
+    sigma = train_cfg["sigma"]
+    method = train_cfg["method"]
+    move_grid = train_cfg["move_grid"]
+    use_softclip = train_cfg["use_softclip"]
+    w_grad = train_cfg["w_grad"]
+    metric_every = train_cfg["save_freq"]
 
     if use_softclip:
         softplus = nn.Softplus(beta=10)

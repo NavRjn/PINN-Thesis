@@ -147,28 +147,43 @@ def post_process_visualize(run_dir, config, device):
     from . import plot
     from . import models
     from . import utils as gs_utils
-    from .visualize import analyze_latent_space  # Reuse your existing plotly logic
+    from .visualize import analyze_latent_space
 
-    # For now, assume flattened config here
+    # 1. Correctly extract hyperparameters from the nested config
+    # Use the 'model' sub-dictionary!
+    m_cfg = config.get("model", {})
+    t_cfg = config.get("training", {})
+    p_cfg = config.get("physics", {})
 
-    # Reconstruct and Load Model
-    model = models.build_model_from_config(config).to(device)
-    ckpt_path = run_dir / "checkpoints" / f"{config.get('ckpt_type', 'final')}.pt"
+    # This ensures build_model_from_config sees nz=3, not nz=1
+    # If build_model_from_config is still looking at top-level config,
+    # we pass m_cfg instead, or fix that function.
+    model = models.build_model_from_config(m_cfg).to(device)
+
+    ckpt_type = config.get("ckpt_type", "final")  # Top level from CLI
+    ckpt_path = run_dir / "checkpoints" / f"{ckpt_type}.pt"
 
     if ckpt_path.exists():
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
         model.eval()
+        print(f"Successfully loaded {ckpt_type} weights.")
+    else:
+        print(f"[ERROR] Checkpoint not found: {ckpt_path}")
+        return
 
-    # Standard Plots (Resolution, Fields)
-    bounds = config.get("bounds", [0, 1, 0, 1])
-    nz = config.get("nz", 1)
-    sigma = config.get("sigma", 1.0)
-    z_test = gs_utils.sample_z(1, nz, sigma, device)
+    # 2. Extract values for plotting
+    # Bounds and N are now inside 'physics' in the unified config
+    bounds = p_cfg.get("bounds", [0, 1, 0, 1])
+    nz = m_cfg.get("nz", 1)
+    bz = t_cfg.get("bz", 10)  # Not strictly needed here, but good to have
+    sigma = config.get("training", {}).get("sigma", 1.0)
+    z_test = gs_utils.sample_z(bz, nz, sigma, device)
 
     plot.plot_resolution_convergence(model, z_test, bounds, gs_utils, device, run_dir)
 
     # Latent Analysis (The Plotly Animation)
     analyze_latent_space(
+        model,
         run_dir,
         ckpt_type=config.get('ckpt_type', 'final'),
         z_start_val=config.get('z_start_val', -10.0),

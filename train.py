@@ -13,7 +13,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 logger = get_logger()
 
 def load_config(path):
-    with open(path, "r") as f:
+    with open("configs/"+path, "r") as f:
         return yaml.safe_load(f)
 
 def deep_update(d, u):

@@ -56,11 +56,9 @@ def residual_at_z_fd(model, x, z, config, N0, N1, dx0, dx1, device):
     return loss.item()
 
 
-def analyze_latent_space(run_dir: Path, ckpt_type="final", z_start_val=-20.0, z_end_val=20.0, num_steps=50):
+def analyze_latent_space(model, run_dir: Path, ckpt_type="final", z_start_val=-20.0, z_end_val=20.0, num_steps=50):
     device = get_device()
     config = load_config(run_dir)
-
-    model = build_model_from_config(config).to(device)
 
     # Locate checkpoint (fallback logic for notebook vs CLI naming conventions)
     ckpt_path = run_dir / "checkpoints" / f"{ckpt_type}.pt"
@@ -76,7 +74,7 @@ def analyze_latent_space(run_dir: Path, ckpt_type="final", z_start_val=-20.0, z_
     N = config.get("grid_N", 64)
     x, X0, X1, dx0, dx1 = get_domain_grid(bounds, N, N, device)
 
-    nz = config.get("nz", 1)
+    nz = config["model"].get("nz", 1)
     z_start = torch.ones(nz, device=device) * z_start_val
     z_end = torch.ones(nz, device=device) * z_end_val
 
