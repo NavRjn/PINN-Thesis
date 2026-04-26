@@ -8,7 +8,7 @@ model:
   ensemble_size: 1000
 
 training:
-  n_iters: 20000
+  n_epochs: 20000
   lr: 0.001
   save_freq: 1000
 

@@ -28,7 +28,7 @@ def main(config, run_dir):
     (run_dir / "checkpoints").mkdir(exist_ok=True)
 
     # 3. Unified Training Loop
-    n_iters = config.get("n_iters", 1_000)
+    n_iters = config.get("n_epochs", 1_000)
     pbar = trange(n_iters)
 
     for i in pbar:
