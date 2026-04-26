@@ -138,53 +138,32 @@ def post_process(model, history, run_dir, device):
 
 
 def post_process_visualize(run_dir, config, device):
-    """
-    Called by the root visualize.py. Reconstructs the model and
-    runs all Gray-Scott specific plotting routines.
-    """
-    # 1. Reconstruct Model
-    model = models.build_model_from_config(config).to(device)
+    from . import plot
+    from . import models
+    from . import utils as gs_utils
+    from .visualize import analyze_latent_space  # Reuse your existing plotly logic
 
-    # 2. Load Weights (Prioritize final, then best)
-    ckpt_path = run_dir / "checkpoints" / "final.pt"
-    if not ckpt_path.exists():
-        ckpt_path = run_dir / "checkpoints" / "best.pt"
+    # Reconstruct and Load Model
+    model = models.build_model_from_config(config).to(device)
+    ckpt_path = run_dir / "checkpoints" / f"{config.get('ckpt_type', 'final')}.pt"
 
     if ckpt_path.exists():
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
         model.eval()
-        print(f"Loaded weights from {ckpt_path}")
-    else:
-        print("[WARN] No weights found. Visualizing initialized model.")
 
-    # 3. Visualization Setup
+    # Standard Plots (Resolution, Fields)
     bounds = config.get("bounds", [0, 1, 0, 1])
     nz = config.get("nz", 1)
     sigma = config.get("sigma", 1.0)
-    N = config.get("N", 128)  # Default higher res for visualization
+    z_test = gs_utils.sample_z(1, nz, sigma, device)
 
-    z_sample = gs_utils.sample_z(bz=1, nz=nz, sigma=sigma, device=device)
+    plot.plot_resolution_convergence(model, z_test, bounds, gs_utils, device, run_dir)
 
-    # 4. Run Plotting Routines from plot.py
-    print("Generating batch fields...")
-    plot.plot_batch_fields_fd(
-        model, z_sample, bounds, N, N, gs_utils, device, run_dir
+    # Latent Analysis (The Plotly Animation)
+    analyze_latent_space(
+        run_dir,
+        ckpt_type=config.get('ckpt_type', 'final'),
+        z_start_val=config.get('z_start_val', -10.0),
+        z_end_val=config.get('z_end_val', 10.0),
+        num_steps=config.get('num_steps', 50)
     )
-
-    print("Generating resolution convergence plots...")
-    plot.plot_resolution_convergence(
-        model, z_sample, bounds, gs_utils, device, run_dir
-    )
-
-    # 5. Handle Loss Curves
-    losses_path = run_dir / "losses.json"
-    if losses_path.exists():
-        import json
-        with open(losses_path, "r") as f:
-            loss_history = json.load(f)
-        # Ensure keys are integers for plot_loss_curves
-        formatted_history = {
-            'obj': {int(k): v for k, v in loss_history.get('obj', {}).items()},
-            'grad': {int(k): v for k, v in loss_history.get('grad', {}).items()}
-        }
-        plot.plot_loss_curves(formatted_history, run_dir)

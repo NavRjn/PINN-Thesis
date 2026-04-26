@@ -6,6 +6,9 @@ import datetime
 # Added import
 from gray_scott.utils import get_logger
 
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 # Initialize logger
 logger = get_logger()
 
