@@ -12,7 +12,8 @@ def get_device():
 def main(config, run_dir):
     # 1. Setup Environment
     device = get_device()
-    torch.manual_seed(config.get("seed", 42))
+    torch.manual_seed(config["training"].get("seed", 42))
+
 
     # 2. Dynamic Problem Loading
     # config["problem_name"] should be 'gray_scott' or 'bratu_1d'
@@ -26,9 +27,10 @@ def main(config, run_dir):
     history = {'loss': []}
     run_dir = Path(run_dir)
     (run_dir / "checkpoints").mkdir(exist_ok=True)
+    best_loss = float('inf')
 
     # 3. Unified Training Loop
-    n_iters = config.get("n_epochs", 1_000)
+    n_iters = config["training"].get("n", 1_000)
     pbar = trange(n_iters)
 
     for i in pbar:
@@ -47,9 +49,14 @@ def main(config, run_dir):
         pbar.set_description(f"Loss: {loss.item():.2e}")
         history['loss'].append(loss.item())
 
+        if loss.item() < best_loss:
+            best_loss = loss.item()
+            logger.debug(f"New best loss: {best_loss:.2e} at iteration {i+1}")
+            torch.save(model.state_dict(), run_dir / "checkpoints" / "best.pt")
+
         # Checkpointing
-        if i % config.get("save_freq", 1000) == 0:
-            torch.save(model.state_dict(), run_dir / "checkpoints" / f"model_{i}.pt")
+        # if i % config["training"].get("save_freq", 1000) == 0:
+        #     torch.save(model.state_dict(), run_dir / "checkpoints" / f"model_{i}.pt")
 
     # 4. Finalize & Problem-specific Visualization
     torch.save(model.state_dict(), run_dir / "checkpoints" / "final.pt")

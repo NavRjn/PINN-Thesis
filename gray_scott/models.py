@@ -117,7 +117,7 @@ def init_model(arch="SIREN+POSENC", use_two_models=True, nz=0, nx=2):
 def build_model_from_config(config):
     """Builds and returns the model based on the experiment configuration."""
     arch = config.get("arch", "SIREN+POSENC")
-    use_two_models = config.get("use_two_models", True)
+    use_two_models = config.get("name", "DualNet") == "DualNet"
     nz = config.get("nz", 1)
     nx = config.get("nx", 2)  # Gray-Scott uses 2 spatial dimensions
 

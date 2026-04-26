@@ -71,12 +71,18 @@ def post_process_visualize(run_dir, config, device):
         print(f"[WARN] Ground truth data not found at {data_path}")
         return
 
+    ckpt_type = config.get("ckpt_type", "final")
+
     # Load Model
     # Since legacy Bratu used torch.save(model), we try that first
-    ckpt_path = run_dir / "checkpoints" / "model_final"
+    ckpt_path = run_dir / "checkpoints" / "model_final.pt"
     if not ckpt_path.exists():
         # Fallback to state_dict if trained via unified
-        ckpt_path = run_dir / "checkpoints" / "final.pt"
+        ckpt_path = run_dir / "checkpoints" / f"{ckpt_type}.pt"
+    if not ckpt_path.exists():
+        # Fallback to state_dict if trained via unified
+        print("falling back to best.pt")
+        ckpt_path = run_dir / "checkpoints" / "best.pt"
 
     if not ckpt_path.exists():
         print(f"[ERROR] No checkpoint found at {ckpt_path}")
@@ -116,3 +122,5 @@ def post_process_visualize(run_dir, config, device):
     fig_dir.mkdir(exist_ok=True)
     plt.savefig(fig_dir / "final_prediction.png")
     plt.close()
+
+    print("Visualization complete. Saved final_prediction.png")

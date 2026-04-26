@@ -229,7 +229,7 @@ def main(config, run_dir):
     )
 
     # 4. Training Loop
-    n_iter = CONFIG["training"]["n_iters"]
+    n_iter = CONFIG["training"]["n"]
     print(f"Starting training for {n_iter} iterations...")
 
     loss_history, iter_history = training_loop(n_iter, optimizer, model, x_f_train, checkpoint_dir)

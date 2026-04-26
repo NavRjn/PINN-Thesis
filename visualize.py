@@ -114,6 +114,8 @@ def main():
         else:
             logger.error(f"Cannot visualize {args.problem}: No API or legacy script found.")
 
+    print("Visualization complete.")
+
 
 if __name__ == "__main__":
     main()

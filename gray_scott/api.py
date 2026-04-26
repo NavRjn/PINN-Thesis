@@ -12,13 +12,19 @@ from . import utils as gs_utils
 def setup_problem(config, device):
     logger = utils.get_logger()
 
+    model_cfg = config.get("model", {})
+    train_cfg = config.get("training", {})
+    physics_cfg = config.get("physics", {})
+
+
+
     # 1. Initialize Architecture
-    arch = config.get("arch", "SIREN+POSENC")
-    use_two_models = config.get("use_two_models", True)
-    nz, nx = config.get("nz", 1), config.get("nx", 2)
+    arch = model_cfg.get("arch", "SIREN+POSENC")
+    use_two_models = model_cfg.get("name", "DualNet") == "DualNet"
+    nz, nx = model_cfg.get("nz", 1), model_cfg.get("nx", 2)
 
     model = init_model(arch=arch, use_two_models=use_two_models, nz=nz, nx=nx).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.get("lr", 1e-4))
+    optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.get("lr", 1e-4))
 
     # 2. Setup PDE Operators
     # AD operators require model params for functional call
@@ -26,11 +32,11 @@ def setup_problem(config, device):
     v_laplacian, vf_x, vf_z = utils.get_ad_operators(model)
 
     # 3. Domain/Grid Sampling Hook
-    method = config.get("method", "FD")
-    bounds = config.get("bounds", [0, 1, 0, 1])
-    N = config.get("N", 64)
-    bz = config.get("bz", 32)
-    sigma = config.get("sigma", 1.0)
+    method = train_cfg.get("method", "FD")
+    bounds = physics_cfg.get("bounds", [0, 1, 0, 1])
+    N = physics_cfg.get("grid_N", 64)
+    bz = train_cfg.get("bz", 32)
+    sigma = train_cfg.get("sigma", 1.0)
 
     # Precompute base grid for FD
     x_fd, _, _, dx0, dx1 = utils.get_domain_grid(bounds, N, N, device)
@@ -42,7 +48,7 @@ def setup_problem(config, device):
         if method == "AD":
             x = torch.rand(5000, nx, device=device)  # Random points for AD
         else:  # FD
-            if config.get("move_grid", False):
+            if train_cfg.get("move_grid", False):
                 x = x_fd + torch.rand(1, 1, device=device) * (1 / N)
             else:
                 x = x_fd
@@ -53,9 +59,9 @@ def setup_problem(config, device):
     # 4. Loss Function Hook (The PDE)
     softplus = nn.Softplus(beta=10)
 
-    def loss_fn(model, batch, config):
+    def loss_fn(model, batch):
         x_tp, z_tp = batch["x_tp"], batch["z_tp"]
-        ny = config.get("ny", 2)
+        ny = model_cfg.get("ny", 2)
 
         # Forward Pass
         ys = model(x_tp, z_tp).reshape(bz, -1, ny)
@@ -77,8 +83,8 @@ def setup_problem(config, device):
             grad_norms = y0_grad_norm / 32  # Approximation matching legacy scaling
 
         # Physics Parameters
-        D1, D2 = config["D1"] / (N ** 2), config["D2"] / (N ** 2)
-        Fr, Kr = config["Fr"], config["Kr"]
+        D1, D2 = physics_cfg["D1"] / (N ** 2), physics_cfg["D2"] / (N ** 2)
+        Fr, Kr = physics_cfg["Fr"], physics_cfg["Kr"]
 
         # PDE Residuals
         y011 = y0 * y1 * y1
@@ -88,12 +94,12 @@ def setup_problem(config, device):
         loss_obj = (res1.square() + res2.square()).mean()
 
         # Regularization (Gradient Maximization)
-        if config.get("use_softclip", True):
+        if train_cfg.get("use_softclip", True):
             loss_grad = -(-softplus(-grad_norms + 1) + 1)
         else:
             loss_grad = -torch.clip(grad_norms, max=1)
 
-        total_loss = loss_obj + config.get("w_grad", 1e-4) * loss_grad
+        total_loss = loss_obj + train_cfg.get("w_grad", 1e-4) * loss_grad
 
         return total_loss, {"obj": loss_obj.item(), "grad": -loss_grad.item()}
 
@@ -142,6 +148,8 @@ def post_process_visualize(run_dir, config, device):
     from . import models
     from . import utils as gs_utils
     from .visualize import analyze_latent_space  # Reuse your existing plotly logic
+
+    # For now, assume flattened config here
 
     # Reconstruct and Load Model
     model = models.build_model_from_config(config).to(device)
