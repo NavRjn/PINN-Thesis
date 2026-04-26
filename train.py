@@ -41,6 +41,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--set", nargs="+")
+    parser.add_argument("--unified", action="store_false", help="Use unified training loop (if implemented)")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -62,7 +63,11 @@ def main():
     # Replaced print with logger.info
     logger.info(f"Training run initiated: {run_dir}")
 
-    if problem == "bratu":
+    if args.unified:
+        logger.info("Using unified training loop.")
+        module = import_module("unified.train")
+        module.main(config, run_dir)
+    elif problem == "bratu":
         module = import_module("1d_bratu.train")
         module.main(config, run_dir)
     elif problem == "gray_scott":

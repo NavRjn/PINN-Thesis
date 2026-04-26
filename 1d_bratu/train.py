@@ -60,7 +60,6 @@ def setup_env():
     Path(CONFIG["paths"]["checkpoint_dir"]).mkdir(parents=True, exist_ok=True)
     Path(CONFIG["paths"]["output_dir"]).mkdir(parents=True, exist_ok=True)
 
-
 def load_data():
     base_dir = Path(__file__).resolve().parent
     data_file = base_dir / CONFIG["paths"]["data"]
@@ -70,7 +69,6 @@ def load_data():
     u1 = data["u1"]
     u2 = data["u2"]
     return x_test, u1, u2
-
 
 def initialize_model(device, n):
     print(CONFIG["model"])
@@ -104,7 +102,6 @@ def initialize_model(device, n):
 
     return model
 
-
 def plot_predictions(x_test, u_pred, title, filename, u1=None, u2=None):
     n = u_pred.shape[0]
     plt.figure()
@@ -122,7 +119,6 @@ def plot_predictions(x_test, u_pred, title, filename, u1=None, u2=None):
     output_path = Path(CONFIG["paths"]["output_dir"]) / filename
     plt.savefig(output_path)
     plt.close()
-
 
 def training_loop(n_iter, optimizer, model, x_f_train, checkpoint_dir):
     loss_history = []
@@ -196,7 +192,6 @@ def save_metrics(loss_history, iter_history, run_dir):
         plt.close()
     except:
         print("[ERROR]: Did not save plot due to error.")
-
 
 def main(config, run_dir):
     CONFIG.update(config)
