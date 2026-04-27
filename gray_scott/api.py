@@ -35,8 +35,8 @@ def setup_problem(config, device):
     method = train_cfg.get("method", "FD")
     bounds = physics_cfg.get("bounds", [0, 1, 0, 1])
     N = physics_cfg.get("grid_N", 64)
-    bz = train_cfg.get("bz", 32)
-    sigma = train_cfg.get("sigma", 1.0)
+    bz = train_cfg.get("bz", 10)
+    sigma = train_cfg.get("sigma", 2.0)
 
     # Precompute base grid for FD
     x_fd, _, _, dx0, dx1 = utils.get_domain_grid(bounds, N, N, device)
@@ -106,7 +106,7 @@ def setup_problem(config, device):
     return model, optimizer, loss_fn, grid_sampler, logger
 
 
-def post_process(model, history, run_dir, device):
+def post_process(model, history, z_history, run_dir, device):
     """Handles problem-specific plotting after training."""
 
     # 1. Retrieve the parameters from the model/config dynamically
@@ -139,6 +139,8 @@ def post_process(model, history, run_dir, device):
     # Optional: plot loss curves if history has the right keys
     if 'obj' in history:
         plot_loss_curves(history, run_dir)
+
+    plot_latent_histogram(z_history, run_dir)
 
     print(f"Gray-Scott post-processing complete in {run_dir}")
 

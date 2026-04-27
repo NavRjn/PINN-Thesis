@@ -24,10 +24,11 @@ def main(config, run_dir):
     model, optimizer, loss_fn, grid_sampler, logger = problem_module.setup_problem(config, device)
 
     # Metrics storage
-    history = {'loss': []}
+    history = {'obj': {}, 'grad': {}, 'div': {}, 'residual': {}, 'latent_sensitivity': {}, 'spectral': {}}
     run_dir = Path(run_dir)
     (run_dir / "checkpoints").mkdir(exist_ok=True)
     best_loss = float('inf')
+    z_history = []
 
     # 3. Unified Training Loop
     n_iters = config["training"].get("n", 1_000)
@@ -41,16 +42,19 @@ def main(config, run_dir):
 
             # Get training data/grid for this step
             batch = grid_sampler()
+            z = batch["z"]
 
             # Calculate PDE Residual Loss
-            loss, loss_metrics = loss_fn(model, batch, config)
+            loss, loss_metrics = loss_fn(model, batch)
 
             loss.backward()
             optimizer.step()
 
             # Logging
             pbar.set_description(f"Loss: {loss.item():.2e}")
-            history['loss'].append(loss.item())
+            history['obj'][i] = loss_metrics["obj"]
+            history["grad"][i] = loss_metrics["grad"]
+            z_history.extend(z.detach().cpu().view(-1).tolist())
 
             if loss.item() < best_loss:
                 best_loss = loss.item()
@@ -59,6 +63,7 @@ def main(config, run_dir):
 
             # Checkpointing
             # if i % config["training"].get("save_freq", 1000) == 0:
+            #     TODO: Implement other metrics: latent sensitivity, spectral metrics, etc. in the loss function and log them here
             #     torch.save(model.state_dict(), run_dir / "checkpoints" / f"model_{i}.pt")
     except KeyboardInterrupt:
         logger.info("Training interrupted by user. Saving current state.")
@@ -69,4 +74,4 @@ def main(config, run_dir):
         with open(run_dir / "losses.json", "w") as f:
             json.dump(history, f)
 
-        problem_module.post_process(model, history, run_dir, device)
+        problem_module.post_process(model, history, z_history, run_dir, device)

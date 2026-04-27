@@ -44,7 +44,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--set", nargs="+")
-    parser.add_argument("--unified", action="store_false", help="Use unified training loop (if implemented)")
+    parser.add_argument("--unified", action="store_true", help="Use unified training loop (if implemented)")
     args = parser.parse_args()
 
     config = load_config(args.config)
