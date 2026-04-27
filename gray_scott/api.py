@@ -149,7 +149,7 @@ def post_process_visualize(run_dir, config, device):
     from . import plot
     from . import models
     from . import utils as gs_utils
-    from .visualize import analyze_latent_space
+    from .plot import analyze_latent_space
 
     # 1. Correctly extract hyperparameters from the nested config
     # Use the 'model' sub-dictionary!
@@ -184,11 +184,4 @@ def post_process_visualize(run_dir, config, device):
     plot.plot_resolution_convergence(model, z_test, bounds, gs_utils, device, run_dir)
 
     # Latent Analysis (The Plotly Animation)
-    analyze_latent_space(
-        model,
-        run_dir,
-        ckpt_type=config.get('ckpt_type', 'final'),
-        z_start_val=config.get('z_start_val', -10.0),
-        z_end_val=config.get('z_end_val', 10.0),
-        num_steps=config.get('num_steps', 50)
-    )
+    analyze_latent_space(model, run_dir, config)

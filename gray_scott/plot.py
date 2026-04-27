@@ -6,6 +6,144 @@ import torch
 
 import numpy as np
 
+import plotly.graph_objects as go
+import numpy as np
+import torch
+from . import utils
+
+
+def residual_at_z_fd(model, x, z, config, N0, N1, dx0, dx1, device):
+    """Computes mean squared PDE residual at a fixed latent z."""
+    # Note: Use config.get("physics", {}) to match unified config structure
+    phys_cfg = config.get("physics", {})
+    Fr = phys_cfg.get("Fr", 0.028)
+    Kr = phys_cfg.get("Kr", 0.057)
+    D1 = phys_cfg.get("D1", 0.1) / (N0 * N1)
+    D2 = phys_cfg.get("D2", 0.05) / (N0 * N1)
+
+    with torch.no_grad():
+        z_tp = z.unsqueeze(0).repeat(x.shape[0], 1)
+        ys = model(x, z_tp).reshape(1, x.shape[0], 2)
+
+        y0 = ys[..., 0].reshape(1, N0, N1)
+        y1 = ys[..., 1].reshape(1, N0, N1)
+
+        y0_lap = utils.laplacian_conv(y0, dx0, dx1, device).reshape(-1)
+        y1_lap = utils.laplacian_conv(y1, dx0, dx1, device).reshape(-1)
+
+        y0 = y0.reshape(-1)
+        y1 = y1.reshape(-1)
+
+        res1 = -y0 * y1 * y1 + Fr * (1 - y0) + D1 * y0_lap
+        res2 = y0 * y1 * y1 - (Fr + Kr) * y1 + D2 * y1_lap
+
+        loss = (res1.square() + res2.square()).mean()
+
+    return loss.item()
+
+
+def analyze_latent_space(model, run_dir, config):
+    """Generates Plotly interpolation html and residual spectrum plot."""
+    device = next(model.parameters()).device
+    m_cfg = config.get("model", {})
+    p_cfg = config.get("physics", {})
+
+    # Visualization params from top-level CLI/config overrides
+    num_steps = config.get("num_steps", 50)
+    z_start_val = config.get("z_start_val", -10.0)
+    z_end_val = config.get("z_end_val", 10.0)
+
+    bounds = p_cfg.get("bounds", [0, 1, 0, 1])
+    N = p_cfg.get("grid_N", 64)
+    x, X0, X1, dx0, dx1 = utils.get_domain_grid(bounds, N, N, device)
+
+    nz = m_cfg.get("nz", 1)
+    z_start = torch.ones(nz, device=device) * z_start_val
+    z_end = torch.ones(nz, device=device) * z_end_val
+    alphas = torch.linspace(0, 1, num_steps, device=device)
+
+    frames, losses = [], []
+    print("Generating latent interpolation frames...")
+    for i, alpha in enumerate(alphas):
+        z = (1 - alpha) * z_start + alpha * z_end
+        x_tp, z_tp = utils.tensor_product_xz(x, z.unsqueeze(0), device)
+
+        with torch.no_grad():
+            Y = model(x_tp, z_tp)[..., 0].reshape(X0.shape).cpu().numpy()
+            loss = residual_at_z_fd(model, x, z, config, N, N, dx0, dx1, device)
+            losses.append(loss)
+
+        frames.append(
+            go.Frame(
+                data=[go.Heatmap(z=Y, colorscale="Viridis", zmin=0.0, zmax=1.0)],
+                name=f"{i}",
+                layout=go.Layout(
+                    annotations=[dict(
+                        text=f"Residual: {loss:.2e}", x=0.02, y=0.98,
+                        xref="paper", yref="paper", showarrow=False,
+                        font=dict(size=14, color="white"), bgcolor="rgba(0,0,0,0.6)"
+                    )]
+                )
+            )
+        )
+    z_start_str = np.array2string(z_start.cpu().numpy(), precision=2)
+    z_end_str = np.array2string(z_end.cpu().numpy(), precision=2)
+
+    # 1. Save Interpolation Animation
+    fig_interp = go.Figure(data=frames[0].data, frames=frames)
+    fig_interp.update_layout(
+        title="Latent Space Interpolation", width=600, height=600,
+        annotations=[
+            dict(
+                text=f"z_start = {z_start_str}<br>z_end = {z_end_str}",
+                x=0.5, y=-0.15,
+                xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(size=12),
+                align="center"
+            )
+        ],
+        sliders=[{
+            "steps": [
+                {"method": "animate", "args": [[f"{i}"], {"mode": "immediate", "frame": {"duration": 0}}],
+                 "label": f"{alphas[i]:.2f}"}
+                for i in range(len(frames))
+            ],
+            "currentvalue": {"prefix": "α = "}
+        }]
+    )
+
+    figures_dir = run_dir / "figures"
+    figures_dir.mkdir(exist_ok=True, parents=True)
+
+    fig_interp.write_html(figures_dir / "latent_interpolation.html", auto_open=True)
+
+    # 2. Save Residual Spectrum Plot
+    fig_spec = go.Figure()
+    fig_spec.add_trace(
+        go.Scatter(x=alphas.cpu().numpy(), y=losses, mode="lines+markers", line=dict(width=2), marker=dict(size=6),
+                   name="Residual"))
+    fig_spec.update_layout(
+        title="Latent Interpolation Residual Spectrum",
+        xaxis_title="α  (z = (1−α) z_start + α z_end)",
+        yaxis_title="Mean squared PDE residual",
+        yaxis_type="log", width=600, height=400,
+        template="plotly_white",
+        annotations=[
+            dict(
+                text=f"z_start = {z_start_str}<br>z_end = {z_end_str}",
+                x=0.5, y=-0.3,
+                xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(size=11),
+                align="center"
+            )
+        ]
+    )
+
+    fig_spec.write_image(figures_dir / "residual_spectrum.png", scale=2)
+    print(f"✅ Saved plotting artifacts to {figures_dir}")
+
 
 def save_figure(fig, name, run_dir, dpi=150):
     path = run_dir / "figures" / f"{name}.png"
