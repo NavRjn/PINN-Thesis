@@ -86,7 +86,7 @@ def main():
 
     try:
         # Try to use the new API hook
-        api = importlib.import_module(f"{args.problem}.api")
+        api = importlib.import_module(f"{args.problem}.api").API # import as class, without instantiating
         logger.debug(f"Import api from {args.problem}.api successful")
         import torch
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
