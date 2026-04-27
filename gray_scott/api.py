@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
+
+from core.train import ProblemSetup
 from .models import init_model
 from . import utils
 from .plot import plot_loss_curves, plot_batch_fields_fd, plot_resolution_convergence, plot_latent_histogram
+from core.train import ProblemSetup
 import json
 from . import plot
 from . import models
@@ -103,10 +106,10 @@ def setup_problem(config, device):
 
         return total_loss, {"obj": loss_obj.item(), "grad": -loss_grad.item()}
 
-    return model, optimizer, loss_fn, grid_sampler, logger
+    return ProblemSetup(model, optimizer, loss_fn, grid_sampler, logger, device, post_process)
 
 
-def post_process(model, history, z_history, run_dir, device):
+def post_process(model, history, run_dir, device):
     """Handles problem-specific plotting after training."""
 
     # 1. Retrieve the parameters from the model/config dynamically
@@ -140,7 +143,7 @@ def post_process(model, history, z_history, run_dir, device):
     if 'obj' in history:
         plot_loss_curves(history, run_dir)
 
-    plot_latent_histogram(z_history, run_dir)
+    plot_latent_histogram(history['z'], run_dir)
 
     print(f"Gray-Scott post-processing complete in {run_dir}")
 
