@@ -84,24 +84,19 @@ def main():
     # Merge: CLI overrides take precedence for the visualization session
     full_config = {**run_config, **viz_overrides}
 
-    # 3. Dynamic API Loading (The Unified Approach)
-    # Map the problem name to the actual module path if they differ
-    module_map = {
-        "bratu": "1d_bratu",
-        "gray_scott": "gray_scott"
-    }
-    module_path = module_map.get(args.problem, args.problem)
-
     try:
         # Try to use the new API hook
-        api = importlib.import_module(f"{module_path}.api")
+        api = importlib.import_module(f"{args.problem}.api")
+        logger.debug(f"Import api from {args.problem}.api successful")
         import torch
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         logger.info(f"Using unified API for {args.problem}")
         api.post_process_visualize(run_dir, full_config, device)
 
-    except (ModuleNotFoundError, AttributeError):
+    except (ModuleNotFoundError) as e:
+
+        logger.error(f"API visualization failed for {args.problem}: {e}")
         # 4. Fallback to Legacy Scripts
         logger.warning(f"No api.post_process_visualize found for {args.problem}. Falling back to legacy scripts.")
 

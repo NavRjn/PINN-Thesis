@@ -1,19 +1,17 @@
 import torch
 import torch.nn as nn
 
-from core.train import ProblemSetup
+from core.utils import ProblemSetup
 from .models import init_model
 from . import utils
 from .plot import plot_loss_curves, plot_batch_fields_fd, plot_resolution_convergence, plot_latent_histogram
-from core.train import ProblemSetup
 import json
 from . import plot
 from . import models
 from . import utils as gs_utils
 
 
-def setup_problem(config, device):
-    logger = utils.get_logger()
+def setup_problem(config, device, logger):
 
     model_cfg = config.get("model", {})
     train_cfg = config.get("training", {})

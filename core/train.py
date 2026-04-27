@@ -55,20 +55,20 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end):
         print("Training loop completed")
 
 
-def get_problem(problem_name, config):
+def get_problem(problem_name, config, logger):
     device = get_device()
     problem_module = importlib.import_module(f"{problem_name}.api")
-    return problem_module.setup_problem(config, device)
+    return problem_module.setup_problem(config, device, logger)
 
 
-def main(config, run_dir):
+def main(config, run_dir, logger):
     # 1. Setup Environment
     torch.manual_seed(config["training"].get("seed", 42))
 
-    problem = get_problem(config['problem'], config)
+    problem = get_problem(config['problem'], config, logger)
     model = problem.model
 
-    # Metrics storag
+    # Metrics storage
     run_dir = Path(run_dir)
     (run_dir / "checkpoints").mkdir(exist_ok=True)
 
@@ -76,7 +76,7 @@ def main(config, run_dir):
     n_iters = config["training"].get("n", 1_000)
 
     def save_best_loss(i, best_loss):
-        problem.logger.debug(f"New best loss: {best_loss:.2e} at iteration {i + 1}")
+        logger.debug(f"New best loss: {best_loss:.2e} at iteration {i + 1}")
         torch.save(model.state_dict(), run_dir / "checkpoints" / "best.pt")
 
     def on_train_end(history):
@@ -92,17 +92,4 @@ def main(config, run_dir):
         save_best_loss=save_best_loss,
         on_train_end=on_train_end
                   )
-
-
-
-class ProblemSetup:
-    def __init__(self, model, optimizer, loss_fn, grid_sampler, logger, device, post_process):
-        self.model = model
-        self.optimizer = optimizer
-        self.loss_fn = loss_fn
-        self.grid_sampler = grid_sampler
-        self.logger = logger
-        self.device = device
-
-        self.post_process = post_process
 

@@ -4,7 +4,7 @@ from importlib import import_module
 from pathlib import Path
 import datetime
 # Added import
-from gray_scott.utils import get_logger
+from core.utils import get_logger
 
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -68,7 +68,7 @@ def main():
     logger.info("Using unified training loop.")
 
     module = import_module("core.train")
-    module.main(config, run_dir)
+    module.main(config, run_dir, logger)
 
 if __name__ == "__main__":
     main()

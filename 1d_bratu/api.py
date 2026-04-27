@@ -3,12 +3,13 @@ import torch.nn as nn
 import numpy as np
 import scipy.io as sio
 from pathlib import Path
+from core.utils import ProblemSetup
 
 from . import models
 from . import utils as bratu_utils
 
 
-def setup_problem(config, device):
+def setup_problem(config, device, logger=None):
     # 1. Model Initialization
     n = config["model"].get("ensemble_size", 100)
     model_type = config["model"].get("name", "PNN")
@@ -57,7 +58,7 @@ def setup_problem(config, device):
 
         return loss, {"pde_residual": loss.item()}
 
-    return model, optimizer, loss_fn, grid_sampler, None
+    return ProblemSetup(model, optimizer, loss_fn, grid_sampler, logger, device, lambda *x: x)
 
 
 def post_process_visualize(run_dir, config, device):
@@ -88,14 +89,11 @@ def post_process_visualize(run_dir, config, device):
         print(f"[ERROR] No checkpoint found at {ckpt_path}")
         return
 
-    try:
-        # Try loading as full model first (legacy)
-        model = torch.load(ckpt_path, map_location=device)
-    except:
-        # Fallback to state_dict (unified)
-        _, _, _, _, _ = setup_problem(config, device)  # To get a model instance
-        model = models.PNN(units=config["model"]["units"], n=config["model"]["ensemble_size"]).to(device)
-        model.load_state_dict(torch.load(ckpt_path, map_location=device))
+
+    # Fallback to state_dict (unified)
+    problem = setup_problem(config, device)  # To get a model instance
+    model = models.PNN(units=config["model"]["units"], n=config["model"]["ensemble_size"]).to(device)
+    model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
     model.eval()
 
