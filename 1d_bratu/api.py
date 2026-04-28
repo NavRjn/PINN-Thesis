@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import scipy.io as sio
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from core.BaseProblemAPI import BaseProblemAPI
 from core.utils import ProblemSetup
@@ -57,13 +58,96 @@ class API(BaseProblemAPI):
             lam = config["physics"].get("lambda", 1.0)
             # Residual: u_xx + lambda * exp(u) = 0
             residual = u_xx + lam * torch.exp(u)
-            loss = torch.mean(residual ** 2)
 
-            return loss, {"obj": loss.item()}
+            model_wise_loss = torch.mean(residual ** 2, dim=(1, 2))
+
+            # one of the metrics tracked in the paper
+            u_mid = u[:, 50, :].detach().reshape(-1)  # Shape: [1000]
+
+            # The total loss for backprop must still be a scalar
+            total_loss = model_wise_loss.mean()
+
+            metrics = {
+                "obj": total_loss.item(),
+                "model_losses": model_wise_loss.detach().cpu().numpy().tolist(),
+                "u_mid": u_mid.cpu().numpy().tolist()
+            }
+
+            return total_loss, metrics
 
         self.problem = ProblemSetup(model, optimizer, loss_fn, grid_sampler, logger, device, lambda *x: x)
         return self.problem
 
+    def post_process(self, model, history, run_dir, device):
+        """
+        Unified visualization for 1D Bratu ensemble results.
+        Assumes history contains: 'obj', 'model_wise_loss', and 'u_mid'.
+        """
+
+        print("Starting post processing")
+        run_dir = Path(run_dir)
+        fig_dir = run_dir / "figures"
+        fig_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extract iterations for the x-axis
+        iters = sorted(history['obj'].keys())
+
+        print("setup")
+        # 1. Total Loss Graph
+        plt.figure(figsize=(8, 5))
+        total_losses = [history['obj'][i] for i in iters]
+        plt.plot(iters, total_losses, color='black', linewidth=2)
+        plt.yscale('log')
+        plt.xlabel("Iteration")
+        plt.ylabel("Total Mean Squared Residual")
+        plt.title("Bratu 1D: Total Training Loss")
+        plt.grid(True, which="both", ls="-", alpha=0.2)
+        plt.savefig(fig_dir / "loss_total.png", dpi=150)
+        plt.close()
+
+        # 2. Model-wise Loss Graph
+        plt.figure(figsize=(8, 5))
+        # Convert dict to array: [num_iters, ensemble_size]
+        model_losses = np.array([history['model_wise_loss'][i] for i in iters])
+        plt.plot(iters, model_losses, alpha=0.1, color='blue')  # Light lines for individual models
+        plt.yscale('log')
+        plt.xlabel("Iteration")
+        plt.ylabel("Individual Model Loss")
+        plt.title("Bratu 1D: Ensemble Loss Convergence")
+        plt.savefig(fig_dir / "loss_model_wise.png", dpi=150)
+        plt.close()
+
+        # 3. u_mid (0.5) Bifurcation Plot
+        plt.figure(figsize=(8, 5))
+        # Convert dict to array: [num_iters, ensemble_size]
+        u_mids = np.array([history['u_mid'][i] for i in iters])
+        plt.plot(iters, u_mids, alpha=0.05, color='red')  # Heavy transparency to see density
+        plt.xlabel("Iteration")
+        plt.ylabel("u(0.5)")
+        plt.title("Bratu 1D: Evolution of Midpoint Predictions (Bifurcation)")
+        plt.savefig(fig_dir / "u_mid_evolution.png", dpi=150)
+        plt.close()
+
+        # 4. Histogram of Solutions (Final State)
+        last_iter = iters[-1]
+        final_u_mids = np.array(history['u_mid'][last_iter])
+
+        plt.figure(figsize=(8, 5))
+        plt.hist(final_u_mids, bins=50, color='skyblue', edgecolor='black', alpha=0.7)
+
+        # Paper logic: Categorize by u(0.5) < 3
+        u1_count = np.sum(final_u_mids < 3.0)
+        u2_count = np.sum(final_u_mids >= 3.0)
+
+        plt.axvline(3.0, color='red', linestyle='--', label=f'u1/u2 Threshold (3.0)')
+        plt.xlabel("u(0.5)")
+        plt.ylabel("Count")
+        plt.title(f"Solution Distribution (u1: {u1_count} | u2: {u2_count})")
+        plt.legend()
+        plt.savefig(fig_dir / "solution_histogram.png", dpi=150)
+        plt.close()
+
+        print(f"[INFO] Bratu visualizations saved to {fig_dir}")
 
     @classmethod
     def post_process_visualize(cls, run_dir, config, device):

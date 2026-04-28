@@ -12,7 +12,7 @@ def get_device():
 def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
     pbar = trange(n_iters)
     best_loss = float("inf")
-    history = {'obj': {}, 'grad': {}, 'div': {}, 'residual': {}, 'latent_sensitivity': {}, 'spectral': {}, 'z': []}
+    history = {'obj': {}, 'grad': {}, 'div': {}, 'residual': {}, 'latent_sensitivity': {}, 'spectral': {}, 'z': [], 'u_mid': {}, 'model_wise_loss': {}}
 
     model = problem.model
     optimizer = problem.optimizer
@@ -21,30 +21,29 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
     try:
         print("Starting loop: Interrupting now will save something")
         for i in pbar:
-            logger.debug("Starting iteration {}/{}".format(i + 1, n_iters))
+            # logger.debug("Starting iteration {}/{}".format(i + 1, n_iters))
             optimizer.zero_grad()
 
-            logger.debug("0")
             # Get training data/grid for this step
             batch = problem.grid_sampler()
             z = batch.get("z", None)
 
-            logger.debug("1")
             # Calculate PDE Residual Loss
             loss, loss_metrics = loss_fn(model, batch)
 
-            logger.debug("2")
             loss.backward()
             optimizer.step()
 
-            logger.debug("3")
             # Logging
             pbar.set_description(f"Loss: {loss.item():.2e}")
             history['obj'][i] = loss_metrics.get("obj", 0)
             history["grad"][i] = loss_metrics.get("grad", 0)
-            history['z'].extend(z.detach().cpu().view(-1).tolist())
+            if z is not None: history['z'].extend(z.detach().cpu().view(-1).tolist())
 
-            logger.debug("4")
+            # very inelegant. Change to better modular API ASAP!
+            history['model_wise_loss'][i] = loss_metrics.get("model_losses", [])
+            history['u_mid'][i] = loss_metrics.get("u_mid", [])
+
             if loss.item() < best_loss:
                 best_loss = loss.item()
                 save_best_loss(i, loss.item())
@@ -56,7 +55,7 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
     except KeyboardInterrupt:
         print(f"\nTraining interrupted by user at {i}. Saving current state.")
     except Exception as e:
-        print("ERROR: ", e.with_traceback())
+        print("ERROR: ", e, e.with_traceback())
     finally:
         on_train_end(history)
         return history
@@ -65,6 +64,7 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
 
 def get_problem(problem_name, config, logger):
     device = get_device()
+    logger.info(f"Using device: {device}")
     problem_api = importlib.import_module(f"{problem_name}.api").API()
     problem_api.setup_problem(config, device, logger)
     return problem_api
@@ -86,7 +86,7 @@ def main(config, run_dir, logger):
     n_iters = config["training"].get("n", 1_000)
 
     def save_best_loss(i, best_loss):
-        logger.debug(f"New best loss: {best_loss:.2e} at iteration {i + 1}")
+        # logger.debug(f"New best loss: {best_loss:.2e} at iteration {i + 1}")
         torch.save(model.state_dict(), run_dir / "checkpoints" / "best.pt")
 
     def on_train_end(history):
@@ -95,7 +95,7 @@ def main(config, run_dir, logger):
             json.dump(history, f)
 
         logger.info("Training completed. Running post-processing visualization.")
-        problem.post_process(model, history, run_dir, problem.device)
+        problem_api.post_process(model, history, run_dir, problem.device)
 
 
     logger.info(f"Training run initiated: {run_dir}")
