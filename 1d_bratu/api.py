@@ -11,6 +11,13 @@ from . import models
 from . import utils as bratu_utils
 
 class API(BaseProblemAPI):
+
+    model_map = {
+        "PNN": models.PNN,
+        "PNN2": models.PNN2,
+        "MHNN": models.MHNN
+    }
+
     def __init__(self):
         super().__init__()
         self.metric_keys = ["u_mid", "model_wise_loss"]  # Add more keys as needed for logging
@@ -23,14 +30,12 @@ class API(BaseProblemAPI):
         std = config["model"].get("std", 1.0)
         factor = config["model"].get("factor", 1.0)
 
-        if model_type == "PNN":
-            model = models.PNN(units=units, n=n, std=std, factor=factor).to(device)
+        if model_type not in self.model_map:
+            raise ValueError(f"Unknown model_type: {model_type}. Available options: {list(self.model_map.keys())}")
         elif model_type == "PNN2":
-            model = models.PNN2(units=units, n=n, R=std).to(device)
-        elif model_type == "MHNN":
-            model = models.MHNN(units=units, n=n, std=std, factor=factor).to(device)
+             model = models.PNN2(units=units, n=n, R=std).to(device)
         else:
-            raise ValueError(f"Unknown model_type: {model_type}")
+             model = self.model_map[model_type](units=units, n=n, std=std, factor=factor).to(device)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=config["training"].get("lr", 1e-3))
 
@@ -42,9 +47,18 @@ class API(BaseProblemAPI):
             x_ensemble = x.repeat(n, 1, 1).to(device)
             x_ensemble.requires_grad_(True)
 
-            lam = torch.tensor(config["physics"].get("lambda", 1.0), device=device)
+            if config['training'].get("sigma", None) is None:
+                lam = torch.tensor(config["physics"].get("lambda", 1.0), device=device)
+            else:
+                # Sample lambda from a normal distribution for each ensemble member
+                lam = torch.normal(
+                    mean=config["physics"].get("lambda", 1.0),
+                    std=config['training'].get("sigma", 1.0),
+                    size=(1,),
+                    device=device,
+                )
 
-            return {"x_ensemble": x_ensemble, "z": lam}
+            return {"x_ensemble": x_ensemble, "z": abs(lam)}
 
         # 3. Loss Function Hook (PDE Residual)
         def loss_fn(model, batch):
@@ -178,23 +192,25 @@ class API(BaseProblemAPI):
             # Fallback to state_dict if trained via unified
             print("falling back to best.pt")
             ckpt_path = run_dir / "checkpoints" / "best.pt"
-
         if not ckpt_path.exists():
             print(f"[ERROR] No checkpoint found at {ckpt_path}")
             return
 
+        model_cfg = config["model"]
 
         # Fallback to state_dict (unified)
         # problem = self.setup_problem(config, device)  # To get a model instance
-        model = models.PNN(units=config["model"]["units"], n=config["model"]["ensemble_size"]).to(device)
+        model = API.model_map[model_cfg.get("name", "PNN")](units=model_cfg["units"], n=model_cfg["ensemble_size"]).to(device)
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
 
         model.eval()
 
+        lam = torch.tensor(config['physics']['lambda'], device=device)
+
         # Inference
         x_tensor = torch.tensor(x_test[None, ...], dtype=torch.float32).to(device)
         with torch.no_grad():
-            u_pred = model(x_tensor).cpu().numpy()  # Shape [n, 100, 1]
+            u_pred = model(x_tensor, lam).cpu().numpy()  # Shape [n, 100, 1]
 
         # Plotting
         import matplotlib.pyplot as plt
@@ -207,7 +223,7 @@ class API(BaseProblemAPI):
         for i in range(n_plot):
             plt.plot(x_test, u_pred[i, :, 0], "r--", alpha=0.3)
 
-        plt.title(f"Bratu 1D Ensemble Predictions (λ={config['physics']['lambda']})")
+        plt.title(f"Bratu 1D Ensemble Predictions (λ={float(lam)})")
         plt.legend()
 
         fig_dir = run_dir / "figures"

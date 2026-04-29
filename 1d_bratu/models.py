@@ -58,7 +58,8 @@ class PNN(nn.Module):
             out = x
 
         # Tile lambda to [ensemble_size, n_points, 1] and concatenate as second input feature
-        lam_tiled = lam.expand(self.n, out.shape[1], 1)
+        lam_tiled = lam.expand(out.shape[0], out.shape[1], 1)
+        # print(f"lam_tiled shape: {lam_tiled.shape}, out shape: {out.shape}, x: shape: {x.shape}")
         out = torch.cat([out, lam_tiled], dim=-1)
 
         for i in range(len(weights) - 1):
