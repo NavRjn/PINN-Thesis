@@ -1,15 +1,10 @@
 import torch
 import torch.nn as nn
 
-from core.utils import ProblemSetup
 from core.BaseProblemAPI import BaseProblemAPI
 from .models import init_model
 from . import utils
 from .plot import plot_loss_curves, plot_batch_fields_fd, plot_resolution_convergence, plot_latent_histogram
-import json
-from . import plot
-from . import models
-from . import utils as gs_utils
 
 
 class API(BaseProblemAPI):
@@ -115,12 +110,15 @@ class API(BaseProblemAPI):
 
             return total_loss, metrics
 
-        self.problem = ProblemSetup(model, optimizer, loss_fn, grid_sampler, logger, device, self.post_process)
-        return self.problem
+        self._init_problem(model, optimizer, loss_fn, grid_sampler, logger, device)
 
 
-    def post_process(self, model, history, run_dir, device):
+
+    def post_process(self, history, run_dir):
         """Handles problem-specific plotting after training."""
+        model = self.model
+        device = self.device
+
 
         # 1. Retrieve the parameters from the model/config dynamically
         # Do not hardcode nz = 1 if your config used a different value!
@@ -152,6 +150,8 @@ class API(BaseProblemAPI):
         # Optional: plot loss curves if history has the right keys
         if 'obj' in history:
             plot_loss_curves(history, run_dir)
+        else:
+            self.logger.error(f"No objective loss found! in {history.keys()}")
 
         plot_latent_histogram(history['z'], run_dir)
 

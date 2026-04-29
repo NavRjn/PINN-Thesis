@@ -6,7 +6,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from core.BaseProblemAPI import BaseProblemAPI
-from core.utils import ProblemSetup
 
 from . import models
 from . import utils as bratu_utils
@@ -79,10 +78,9 @@ class API(BaseProblemAPI):
 
             return total_loss, metrics
 
-        self.problem = ProblemSetup(model, optimizer, loss_fn, grid_sampler, logger, device, lambda *x: x)
-        return self.problem
+        self._init_problem(model, optimizer, loss_fn, grid_sampler, logger, device)
 
-    def post_process(self, model, history, run_dir, device):
+    def post_process(self, history, run_dir):
         """
         Unified visualization for 1D Bratu ensemble results.
         Assumes history contains: 'obj', 'model_wise_loss', and 'u_mid'.

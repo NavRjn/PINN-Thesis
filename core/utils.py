@@ -3,19 +3,6 @@ from pathlib import Path
 import sys
 
 
-class ProblemSetup:
-    def __init__(self, model, optimizer, loss_fn, grid_sampler, logger, device, post_process):
-        self.model = model
-        self.optimizer = optimizer
-        self.loss_fn = loss_fn
-        self.grid_sampler = grid_sampler
-        self.logger = logger
-        self.device = device
-
-        self.post_process = post_process
-
-
-
 # =======================
 # Logging
 # =======================

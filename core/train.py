@@ -9,12 +9,11 @@ def get_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def training_loop(n_iters, problem_api, save_best_loss, on_train_end, logger=None):
+def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
     pbar = trange(n_iters)
     best_loss = float("inf")
-    keys = problem_api.get_metric_keys()
+    keys = problem.get_metric_keys()
     history = {'obj': {}, 'z': []} | dict.fromkeys(keys, {})
-    problem = problem_api.problem
 
     model = problem.model
     optimizer = problem.optimizer
@@ -68,17 +67,16 @@ def training_loop(n_iters, problem_api, save_best_loss, on_train_end, logger=Non
 def get_problem(problem_name, config, logger):
     device = get_device()
     logger.info(f"Using device: {device}")
-    problem_api = importlib.import_module(f"{problem_name}.api").API()
-    problem_api.setup_problem(config, device, logger)
-    return problem_api
+    problem = importlib.import_module(f"{problem_name}.api").API()
+    problem.setup_problem(config, device, logger)
+    return problem
 
 
 def main(config, run_dir, logger):
     # 1. Setup Environment
     torch.manual_seed(config["training"].get("seed", 42))
 
-    problem_api = get_problem(config['problem'], config, logger)
-    problem = problem_api.problem
+    problem = get_problem(config['problem'], config, logger)
     model = problem.model
 
     # Metrics storage
@@ -98,14 +96,14 @@ def main(config, run_dir, logger):
             json.dump(history, f)
 
         logger.info("Training completed. Running post-processing visualization.")
-        problem_api.post_process(model, history, run_dir, problem.device)
+        problem.post_process(model, history, run_dir, problem.device)
 
 
     logger.info(f"Training run initiated: {run_dir}")
 
     _ = training_loop(
         n_iters=n_iters,
-        problem_api=problem_api,
+        problem=problem,
         save_best_loss=save_best_loss,
         on_train_end=on_train_end,
         logger=logger
