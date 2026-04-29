@@ -96,7 +96,7 @@ def main(config, run_dir, logger):
             json.dump(history, f)
 
         logger.info("Training completed. Running post-processing visualization.")
-        problem.post_process(model, history, run_dir, problem.device)
+        problem.post_process(history, run_dir)
 
 
     logger.info(f"Training run initiated: {run_dir}")

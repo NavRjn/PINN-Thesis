@@ -41,11 +41,15 @@ class API(BaseProblemAPI):
             # Tile for ensemble: shape [n, 100, 1]
             x_ensemble = x.repeat(n, 1, 1).to(device)
             x_ensemble.requires_grad_(True)
-            return {"x_ensemble": x_ensemble}
+
+            lam = torch.tensor(config["physics"].get("lambda", 1.0), device=device)
+
+            return {"x_ensemble": x_ensemble, "z": lam}
 
         # 3. Loss Function Hook (PDE Residual)
         def loss_fn(model, batch):
             x = batch["x_ensemble"]
+            lam = batch["z"]
             u = model(x)
 
             # 1st Derivative
@@ -58,7 +62,6 @@ class API(BaseProblemAPI):
                 u_x, x, grad_outputs=torch.ones_like(u_x), create_graph=True
             )[0]
 
-            lam = config["physics"].get("lambda", 1.0)
             # Residual: u_xx + lambda * exp(u) = 0
             residual = u_xx + lam * torch.exp(u)
 
