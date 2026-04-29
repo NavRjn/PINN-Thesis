@@ -15,7 +15,7 @@ class PNN(nn.Module):
         self.std = std
         self.factor = factor
         weights = [
-            nn.Parameter(torch.empty(n, 1, units), requires_grad=True),
+            nn.Parameter(torch.empty(n, 2, units), requires_grad=True),
             nn.Parameter(torch.empty(n, units, units), requires_grad=True),
             # nn.Parameter(torch.empty(n, units, units), requires_grad=True),
             nn.Parameter(torch.empty(n, units, 1), requires_grad=True),
@@ -47,18 +47,25 @@ class PNN(nn.Module):
         for b in self._bias:
             nn.init.normal_(b, mean=0, std=self.std)
 
-    def forward(self, x):
+    def forward(self, x, lam):
         var_list = utils.unflatten(self.theta, self.shapes)
-        weights = var_list[:len(var_list)//2]
-        bias = var_list[len(var_list)//2:]
+        weights = var_list[:len(var_list) // 2]
+        bias = var_list[len(var_list) // 2:]
 
         if len(x.shape) == 2:
             out = torch.tile(x[None, ...], [self.n, 1, 1])
         else:
             out = x
+
+        # Tile lambda to [ensemble_size, n_points, 1] and concatenate as second input feature
+        lam_tiled = lam.expand(self.n, out.shape[1], 1)
+        out = torch.cat([out, lam_tiled], dim=-1)
+
         for i in range(len(weights) - 1):
+            # First iteration now handles the 2-dimensional input (x, lambda)
             out = torch.einsum("nbi,nij->nbj", out, weights[i]) + bias[i]
             out = self.activation(out)
+
         out = torch.einsum("nbi,nij->nbj", out, weights[-1]) + bias[-1]
         out = self.factor * out * x * (1 - x)
         return out

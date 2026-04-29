@@ -50,7 +50,7 @@ class API(BaseProblemAPI):
         def loss_fn(model, batch):
             x = batch["x_ensemble"]
             lam = batch["z"]
-            u = model(x)
+            u = model(x, lam)
 
             # 1st Derivative
             u_x = torch.autograd.grad(
