@@ -12,6 +12,10 @@ from . import models
 from . import utils as bratu_utils
 
 class API(BaseProblemAPI):
+    def __init__(self):
+        super().__init__()
+        self.metric_keys = ["u_mid", "model_wise_loss"]  # Add more keys as needed for logging
+
     def setup_problem(self, config, device, logger=None):
         # 1. Model Initialization
         n = config["model"].get("ensemble_size", 100)
@@ -69,8 +73,8 @@ class API(BaseProblemAPI):
 
             metrics = {
                 "obj": total_loss.item(),
-                "model_losses": model_wise_loss.detach().cpu().numpy().tolist(),
-                "u_mid": u_mid.cpu().numpy().tolist()
+                self.metric_keys[0]: u_mid.cpu().numpy().tolist(),
+                self.metric_keys[1]: model_wise_loss.detach().cpu().numpy().tolist()
             }
 
             return total_loss, metrics

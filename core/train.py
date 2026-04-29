@@ -9,10 +9,12 @@ def get_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
+def training_loop(n_iters, problem_api, save_best_loss, on_train_end, logger=None):
     pbar = trange(n_iters)
     best_loss = float("inf")
-    history = {'obj': {}, 'grad': {}, 'div': {}, 'residual': {}, 'latent_sensitivity': {}, 'spectral': {}, 'z': [], 'u_mid': {}, 'model_wise_loss': {}}
+    keys = problem_api.get_metric_keys()
+    history = {'obj': {}, 'z': []} | dict.fromkeys(keys, {})
+    problem = problem_api.problem
 
     model = problem.model
     optimizer = problem.optimizer
@@ -37,12 +39,13 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
             # Logging
             pbar.set_description(f"Loss: {loss.item():.2e}")
             history['obj'][i] = loss_metrics.get("obj", 0)
-            history["grad"][i] = loss_metrics.get("grad", 0)
             if z is not None: history['z'].extend(z.detach().cpu().view(-1).tolist())
 
-            # very inelegant. Change to better modular API ASAP!
-            history['model_wise_loss'][i] = loss_metrics.get("model_losses", [])
-            history['u_mid'][i] = loss_metrics.get("u_mid", [])
+            for key in keys:
+                key_metric = loss_metrics.get(key, []) # default as list is perhaps a problem
+                if key_metric is None:
+                    logger.warn(f"key: {key} not found at in {key_metric} @ {i}")
+                history[key][i] = key_metric
 
             if loss.item() < best_loss:
                 best_loss = loss.item()
@@ -102,7 +105,7 @@ def main(config, run_dir, logger):
 
     _ = training_loop(
         n_iters=n_iters,
-        problem=problem,
+        problem_api=problem_api,
         save_best_loss=save_best_loss,
         on_train_end=on_train_end,
         logger=logger

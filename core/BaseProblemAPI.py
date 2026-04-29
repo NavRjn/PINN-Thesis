@@ -4,6 +4,10 @@ from core.utils import ProblemSetup
 class BaseProblemAPI:
     def __init__(self):
         self.problem: ProblemSetup = None
+        self.metric_keys = []
+
+    def get_metric_keys(self):
+        return self.metric_keys
 
     def setup_problem(self, config, device, logger):
         """

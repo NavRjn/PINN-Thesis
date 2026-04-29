@@ -13,12 +13,16 @@ from . import utils as gs_utils
 
 
 class API(BaseProblemAPI):
+
+    def __init__(self):
+        super().__init__()
+        self.metric_keys = ["grad"]  # More: "div", "residual", "latent_sensitivity", "spectral"
+
     def setup_problem(self, config, device, logger):
 
         model_cfg = config.get("model", {})
         train_cfg = config.get("training", {})
         physics_cfg = config.get("physics", {})
-
 
 
         # 1. Initialize Architecture
@@ -104,7 +108,12 @@ class API(BaseProblemAPI):
 
             total_loss = loss_obj + train_cfg.get("w_grad", 1e-4) * loss_grad
 
-            return total_loss, {"obj": loss_obj.item(), "grad": -loss_grad.item()}
+            metrics = {
+                "obj": loss_obj.item(),
+                self.metric_keys[0]: -loss_grad.item()
+            }
+
+            return total_loss, metrics
 
         self.problem = ProblemSetup(model, optimizer, loss_fn, grid_sampler, logger, device, self.post_process)
         return self.problem
