@@ -4,6 +4,10 @@ import numpy as np
 import scipy.io as sio
 from pathlib import Path
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+
+from .utils import plot_latent_histogram
+import plotly.graph_objects as go
 
 from core.BaseProblemAPI import BaseProblemAPI
 
@@ -166,69 +170,132 @@ class API(BaseProblemAPI):
         plt.savefig(fig_dir / "solution_histogram.png", dpi=150)
         plt.close()
 
+
+        # plot conditioning vector distribution
+        if len(history['z']) > 0:
+            plot_latent_histogram(history['z'], run_dir)
+
         print(f"[INFO] Bratu visualizations saved to {fig_dir}")
+
 
     @classmethod
     def post_process_visualize(cls, run_dir, config, device):
-        """Unified visualization hook for Bratu 1D."""
-        # Load Ground Truth
-        data_path = (Path(__file__).parent / "data" / "data.mat").resolve()
-        try:
-            data = sio.loadmat(str(data_path))
+        """
+        Generates an interactive Plotly HTML visualization with a lambda slider.
+        """
+        # 1. Load Data (Ground Truth for reference)
+        data_dir = (Path(__file__).parent / "data").resolve()
+        if (data_dir / "data.npz").exists():
+            data = np.load(data_dir / "data.npz")
             x_test, u1, u2 = data["x_test"], data["u1"], data["u2"]
-        except FileNotFoundError:
-            print(f"[WARN] Ground truth data not found at {data_path}")
+        elif (data_dir / "data.mat").exists():
+            data = sio.loadmat(str(data_dir / "data.mat"))
+            x_test, u1, u2 = data["x_test"].flatten(), data["u1"].flatten(), data["u2"].flatten()
+        else:
+            print(f"[WARN] Ground truth data not found at {data_dir}")
             return
 
+        # 2. Load the Parametric Model
         ckpt_type = config.get("ckpt_type", "final")
-
-        # Load Model
-        # Since legacy Bratu used torch.save(model), we try that first
-        ckpt_path = run_dir / "checkpoints" / "model_final.pt"
+        ckpt_path = run_dir / "checkpoints" / f"{ckpt_type}.pt"
         if not ckpt_path.exists():
-            # Fallback to state_dict if trained via unified
-            ckpt_path = run_dir / "checkpoints" / f"{ckpt_type}.pt"
-        if not ckpt_path.exists():
-            # Fallback to state_dict if trained via unified
-            print("falling back to best.pt")
             ckpt_path = run_dir / "checkpoints" / "best.pt"
+
         if not ckpt_path.exists():
             print(f"[ERROR] No checkpoint found at {ckpt_path}")
             return
 
         model_cfg = config["model"]
-
-        # Fallback to state_dict (unified)
-        # problem = self.setup_problem(config, device)  # To get a model instance
-        model = API.model_map[model_cfg.get("name", "PNN")](units=model_cfg["units"], n=model_cfg["ensemble_size"]).to(device)
+        # Initialize the model using the registered map
+        model = API.model_map[model_cfg.get("name", "PNN")](
+            units=model_cfg["units"],
+            n=model_cfg["ensemble_size"]
+        ).to(device)
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
-
         model.eval()
 
-        lam = torch.tensor(config['physics']['lambda'], device=device)
+        # 3. Define the Lambda Range for the Slider
+        # Defaulting to [0.5, 3.5] to cover the interesting bifurcation region
+        lam_start = max(0.0, config.get("z_start_val", 0.0))
+        lam_end = config.get("z_end_val", 2.0)
+        num_steps = config.get("num_steps", 30)
+        lambdas = np.linspace(lam_start, lam_end, num_steps)
 
-        # Inference
         x_tensor = torch.tensor(x_test[None, ...], dtype=torch.float32).to(device)
-        with torch.no_grad():
-            u_pred = model(x_tensor, lam).cpu().numpy()  # Shape [n, 100, 1]
+        x_test = x_test.flatten()
+        n_plot = config.get("n", 100)
 
-        # Plotting
-        import matplotlib.pyplot as plt
-        plt.figure(figsize=(8, 6))
-        plt.plot(x_test, u1, "k-", label="u1 (True)")
-        plt.plot(x_test, u2, "b-", label="u2 (True)")
+        frames = []
+        # Generate data for each slider step
+        for l_val in tqdm(lambdas):
+            lam_tensor = torch.tensor(l_val, device=device, dtype=torch.float32)
 
-        # Plot first few ensemble members
-        n_plot = min(u_pred.shape[0], 20)
-        for i in range(n_plot):
-            plt.plot(x_test, u_pred[i, :, 0], "r--", alpha=0.3)
+            with torch.no_grad():
+                # Use the new parametric forward(x, lam)
+                u_pred = model(x_tensor, lam_tensor).cpu().numpy()  # [n, 100, 1]
+                # print(u_pred.shape)
 
-        plt.title(f"Bratu 1D Ensemble Predictions (λ={float(lam)})")
-        plt.legend()
+                # --- QUICK DEBUG START ---
+                if abs(l_val - 1.0) < 0.01:
+                    print(x_test.shape, u_pred[i, :, 0].shape)
+                    plt.figure()
+                    for i in range(n_plot): plt.plot(x_test, u_pred[i, :, 0], "r--", alpha=0.3)
+                    plt.title(f"DEBUG lam={l_val:.2f} shape={u_pred.shape}")
+                    plt.grid(True)
+                    plt.savefig(run_dir / "figures" / "debug_static_lam1.png")
+                    plt.close()
+                # --- QUICK DEBUG END ---
 
+            # Each frame contains multiple traces (one for each ensemble member)
+            frame_data = []
+            for i in range(n_plot):
+                frame_data.append(go.Scatter(
+                    x=x_test, y=u_pred[i, :, 0],
+                    mode='lines',
+                    line=dict(color='rgba(255, 0, 0, 0.2)', width=1, dash='dash'),
+                    name=f"Model {i}" if i == 0 else None,
+                    showlegend=(i == 0)
+                ))
+
+            frames.append(go.Frame(data=frame_data, name=f"lam_{l_val:.2f}"))
+
+
+        # 4. Build Interactive Figure
+        fig = go.Figure(
+            data=frames[0].data,  # Initial plot state
+            layout=go.Layout(
+                title=f"Parametric Bratu 1D: Ensemble Predictions",
+                xaxis=dict(title="t (Spatial Coordinate)", range=[0, 1]),
+                yaxis=dict(title="u(t) (Temperature)", range=[-0.5, 5.0]),
+                template="plotly_white",
+                updatemenus=[{
+                    "type": "buttons",
+                    "buttons": [{"label": "Play", "method": "animate", "args": [None]}]
+                }],
+                sliders=[{
+                    "currentvalue": {"prefix": "λ (Heat Generation): "},
+                    "steps": [
+                        {
+                            "method": "animate",
+                            "label": f"{l:.2f}",
+                            "args": [[f"lam_{l:.2f}"], {"frame": {"duration": 0, "redraw": True}, "mode": "immediate"}]
+                        } for l in lambdas
+                    ]
+                }]
+            ),
+            frames=frames
+        )
+
+        # Add ground truth static lines (optional, only if relevant to current lambda)
+        fig.add_trace(
+            go.Scatter(x=x_test, y=u1, mode='lines', line=dict(color='black'), name="u1 (Stable Ground Truth)"))
+        fig.add_trace(
+            go.Scatter(x=x_test, y=u2, mode='lines', line=dict(color='blue'), name="u2 (Unstable Ground Truth)"))
+
+        # 5. Save Artifact
         fig_dir = run_dir / "figures"
         fig_dir.mkdir(exist_ok=True)
-        plt.savefig(fig_dir / "final_prediction.png")
-        plt.close()
+        html_path = fig_dir / "parametric_prediction.html"
+        fig.write_html(str(html_path), auto_open=True)
 
-        print("Visualization complete. Saved final_prediction.png")
+        print(f"Visualization complete. Saved interactive graph to {html_path}")

@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--z_end", type=float, default=10.0)
     parser.add_argument("--z_start", type=float, default=None)
     parser.add_argument("--ckpt_type", type=str, default="final")
+    parser.add_argument("--n", type=int, default=100)
 
     args = parser.parse_args()
 
@@ -79,6 +80,7 @@ def main():
         "num_steps": args.num_steps,
         "z_start_val": args.z_start if args.z_start is not None else -args.z_end,
         "z_end_val": args.z_end,
+        "n": args.n,
         "ckpt_type": args.ckpt_type
     }
     # Merge: CLI overrides take precedence for the visualization session

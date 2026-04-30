@@ -41,7 +41,7 @@ class BaseProblemAPI:
         pass
 
     @classmethod
-    def post_process_visualize(cls, run_dir, config):
+    def post_process_visualize(cls, run_dir, config, device):
         """
         This method can be optionally implemented by each problem-specific API for any additional visualization after training.
         By default, it does nothing.

@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 import numpy as np
-from torch.distributions import Normal
+import matplotlib.pyplot as plt
 
 
 def loss_function(model, x, y, noise, std):
@@ -49,17 +49,20 @@ def unflatten(vs, shapes):
 #                      preds_mean - 3. * preds_std, color=colors[2], alpha=0.1)
 
 
-        
+def plot_latent_histogram(z_history,  run_dir, bins=50):
+    z_array = np.array(z_history)
 
+    # Plot histogram
+    plt.figure()
+    plt.hist(z_array, bins=bins, density=True, alpha=0.7, label="Sampled z")
 
+    # Overlay Gaussian for comparison
+    mu, std = z_array.mean(), z_array.std()
+    x = np.linspace(mu - 4 * std, mu + 4 * std, 200)
+    gaussian = (1 / (std * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / std) ** 2)
 
-# def loss_function(model, x, y, noise, std):
-#     likeli_dist = Normal(loc=y, scale=noise)
-#     prior_dist = Normal(loc=0, scale=std)
-#     y_pred = model.forward(x)
-
-#     log_likeli = torch.sum(likeli_dist.log_prob(y_pred)) / 1000
-#     log_prior = 0
-#     for p in model.parameters():
-#         log_prior += torch.sum(prior_dist.log_prob(p)) / 1000
-#     return -log_likeli - 0 * log_prior
+    plt.plot(x, gaussian, label=f"Fitted Gaussian (μ={mu:.2f}, σ={std:.2f})")
+    plt.title("Distribution of sampled z (mean over batch)")
+    plt.legend()
+    plt.savefig(run_dir/ "figures" / "z_histogram.png")
+    plt.close()
