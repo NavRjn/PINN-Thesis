@@ -1,181 +1,194 @@
 import torch
-import torch.nn as nn
 import numpy as np
 import scipy.io as sio
-from pathlib import Path
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 
-from .utils import plot_latent_histogram
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+
+from tqdm import tqdm
 
 from core.BaseProblemAPI import BaseProblemAPI
 
-from . import models
-from . import utils as bratu_utils
+from .problem import ProblemDefinition
+from .utils import plot_latent_histogram
+
 
 class API(BaseProblemAPI):
 
-    model_map = {
-        "PNN": models.PNN,
-        "PNN2": models.PNN2,
-        "MHNN": models.MHNN
-    }
+    model_map = ProblemDefinition.model_map
 
     def __init__(self):
         super().__init__()
-        self.metric_keys = ["u_mid", "model_wise_loss"]  # Add more keys as needed for logging
 
+        self.problem = None
+
+    # ==========================================================
+    # FRAMEWORK ENTRYPOINT
+    # ==========================================================
     def setup_problem(self, config, device, logger=None):
-        # 1. Model Initialization
-        n = config["model"].get("ensemble_size", 100)
-        model_type = config["model"].get("name", "PNN")
-        units = config["model"].get("units", 50)
-        std = config["model"].get("std", 1.0)
-        factor = config["model"].get("factor", 1.0)
 
-        if model_type not in self.model_map:
-            raise ValueError(f"Unknown model_type: {model_type}. Available options: {list(self.model_map.keys())}")
-        elif model_type == "PNN2":
-             model = models.PNN2(units=units, n=n, R=std).to(device)
-        else:
-             model = self.model_map[model_type](units=units, n=n, std=std, factor=factor).to(device)
+        self.problem = ProblemDefinition(config, device)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=config["training"].get("lr", 1e-3))
+        self.metric_keys = self.problem.metric_keys
 
-        # 2. Grid Sampler Hook
-        def grid_sampler():
-            # Bratu 1D typically uses a fixed grid of 100 points
-            x = torch.linspace(0, 1, 100).reshape(-1, 1)
-            # Tile for ensemble: shape [n, 100, 1]
-            x_ensemble = x.repeat(n, 1, 1).to(device)
-            x_ensemble.requires_grad_(True)
+        self._init_problem(
+            model=self.problem.model,
+            optimizer=self.problem.optimizer,
+            loss_fn=self.problem.loss_fn,
+            grid_sampler=self.problem.grid_sampler,
+            logger=logger,
+            device=device
+        )
 
-            if config['training'].get("sigma", None) is None:
-                lam = torch.tensor(config["physics"].get("lambda", 1.0), device=device)
-            else:
-                # Sample lambda from a normal distribution for each ensemble member
-                lam = torch.normal(
-                    mean=config["physics"].get("lambda", 1.0),
-                    std=config['training'].get("sigma", 1.0),
-                    size=(1,),
-                    device=device,
-                )
-
-            return {"x_ensemble": x_ensemble, "z": abs(lam)}
-
-        # 3. Loss Function Hook (PDE Residual)
-        def loss_fn(model, batch):
-            x = batch["x_ensemble"]
-            lam = batch["z"]
-            u = model(x, lam)
-
-            # 1st Derivative
-            u_x = torch.autograd.grad(
-                u, x, grad_outputs=torch.ones_like(u), create_graph=True
-            )[0]
-
-            # 2nd Derivative
-            u_xx = torch.autograd.grad(
-                u_x, x, grad_outputs=torch.ones_like(u_x), create_graph=True
-            )[0]
-
-            # Residual: u_xx + lambda * exp(u) = 0
-            residual = u_xx + lam * torch.exp(u)
-
-            model_wise_loss = torch.mean(residual ** 2, dim=(1, 2))
-
-            # one of the metrics tracked in the paper
-            u_mid = u[:, 50, :].detach().reshape(-1)  # Shape: [1000]
-
-            # The total loss for backprop must still be a scalar
-            total_loss = model_wise_loss.mean()
-
-            metrics = {
-                "obj": total_loss.item(),
-                self.metric_keys[0]: u_mid.cpu().numpy().tolist(),
-                self.metric_keys[1]: model_wise_loss.detach().cpu().numpy().tolist()
-            }
-
-            return total_loss, metrics
-
-        self._init_problem(model, optimizer, loss_fn, grid_sampler, logger, device)
-
+    # ==========================================================
+    # POST TRAINING
+    # ==========================================================
     def post_process(self, history, run_dir):
-        """
-        Unified visualization for 1D Bratu ensemble results.
-        Assumes history contains: 'obj', 'model_wise_loss', and 'u_mid'.
-        """
 
         print("Starting post processing")
+
         run_dir = Path(run_dir)
         fig_dir = run_dir / "figures"
         fig_dir.mkdir(parents=True, exist_ok=True)
 
-        # Extract iterations for the x-axis
-        iters = sorted(history['obj'].keys())
+        iters = sorted(history["obj"].keys())
 
-        print("setup")
-        # 1. Total Loss Graph
+        # ------------------------------------------------------
+        # Total Loss
+        # ------------------------------------------------------
+
         plt.figure(figsize=(8, 5))
-        total_losses = [history['obj'][i] for i in iters]
-        plt.plot(iters, total_losses, color='black', linewidth=2)
-        plt.yscale('log')
+
+        total_losses = [history["obj"][i] for i in iters]
+
+        plt.plot(
+            iters,
+            total_losses,
+            color="black",
+            linewidth=2
+        )
+
+        plt.yscale("log")
+
         plt.xlabel("Iteration")
         plt.ylabel("Total Mean Squared Residual")
+
         plt.title("Bratu 1D: Total Training Loss")
+
         plt.grid(True, which="both", ls="-", alpha=0.2)
+
         plt.savefig(fig_dir / "loss_total.png", dpi=150)
+
         plt.close()
 
-        # 2. Model-wise Loss Graph
+        # ------------------------------------------------------
+        # Model-wise Loss
+        # ------------------------------------------------------
+
         plt.figure(figsize=(8, 5))
-        # Convert dict to array: [num_iters, ensemble_size]
-        model_losses = np.array([history['model_wise_loss'][i] for i in iters])
-        plt.plot(iters, model_losses, alpha=0.1, color='blue')  # Light lines for individual models
-        plt.yscale('log')
+
+        model_losses = np.array([
+            history["model_wise_loss"][i]
+            for i in iters
+        ])
+
+        plt.plot(
+            iters,
+            model_losses,
+            alpha=0.1,
+            color="blue"
+        )
+
+        plt.yscale("log")
+
         plt.xlabel("Iteration")
         plt.ylabel("Individual Model Loss")
+
         plt.title("Bratu 1D: Ensemble Loss Convergence")
+
         plt.savefig(fig_dir / "loss_model_wise.png", dpi=150)
+
         plt.close()
 
-        # 3. u_mid (0.5) Bifurcation Plot
+        # ------------------------------------------------------
+        # Bifurcation Plot
+        # ------------------------------------------------------
+
         plt.figure(figsize=(8, 5))
-        # Convert dict to array: [num_iters, ensemble_size]
-        u_mids = np.array([history['u_mid'][i] for i in iters])
-        plt.plot(iters, u_mids, alpha=0.05, color='red')  # Heavy transparency to see density
+
+        u_mids = np.array([
+            history["u_mid"][i]
+            for i in iters
+        ])
+
+        plt.plot(
+            iters,
+            u_mids,
+            alpha=0.05,
+            color="red"
+        )
+
         plt.xlabel("Iteration")
         plt.ylabel("u(0.5)")
-        plt.title("Bratu 1D: Evolution of Midpoint Predictions (Bifurcation)")
-        plt.savefig(fig_dir / "u_mid_evolution.png", dpi=150)
+
+        plt.title("Bratu 1D: Evolution of Midpoint Predictions")
+
+        plt.savefig(
+            fig_dir / "u_mid_evolution.png",
+            dpi=150
+        )
+
         plt.close()
 
-        # 4. Histogram of Solutions (Final State)
+        # ------------------------------------------------------
+        # Final Histogram
+        # ------------------------------------------------------
+
         last_iter = iters[-1]
-        final_u_mids = np.array(history['u_mid'][last_iter])
+
+        final_u_mids = np.array(history["u_mid"][last_iter])
 
         plt.figure(figsize=(8, 5))
-        plt.hist(final_u_mids, bins=50, color='skyblue', edgecolor='black', alpha=0.7)
 
-        # Paper logic: Categorize by u(0.5) < 3
+        plt.hist(
+            final_u_mids,
+            bins=50,
+            color="skyblue",
+            edgecolor="black",
+            alpha=0.7
+        )
+
         u1_count = np.sum(final_u_mids < 3.0)
         u2_count = np.sum(final_u_mids >= 3.0)
 
-        plt.axvline(3.0, color='red', linestyle='--', label=f'u1/u2 Threshold (3.0)')
-        plt.xlabel("u(0.5)")
-        plt.ylabel("Count")
-        plt.title(f"Solution Distribution (u1: {u1_count} | u2: {u2_count})")
-        plt.legend()
-        plt.savefig(fig_dir / "solution_histogram.png", dpi=150)
+        plt.axvline(
+            3.0,
+            color="red",
+            linestyle="--"
+        )
+
+        plt.title(
+            f"Solution Distribution "
+            f"(u1: {u1_count} | u2: {u2_count})"
+        )
+
+        plt.savefig(
+            fig_dir / "solution_histogram.png",
+            dpi=150
+        )
+
         plt.close()
 
+        if len(history["z"]) > 0:
+            plot_latent_histogram(history["z"], run_dir)
 
-        # plot conditioning vector distribution
-        if len(history['z']) > 0:
-            plot_latent_histogram(history['z'], run_dir)
+        print(f"[INFO] Saved visualizations to {fig_dir}")
 
-        print(f"[INFO] Bratu visualizations saved to {fig_dir}")
+    # ==========================================================
+    # INTERACTIVE VISUALIZATION
+    # ==========================================================
 
 
     @classmethod
