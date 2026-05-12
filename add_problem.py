@@ -65,6 +65,40 @@ def git_add(files):
     subprocess.run(["git", "add", *paths], check=False)
 
 
+def print_next_steps(problem_dir: Path, config_path: Path):
+    api_path = problem_dir / "api.py"
+    problem_path = problem_dir / "problem.py"
+    readme_path = problem_dir / "README.md"
+
+    print("\n" + "="*60)
+    print("🚀 Problem scaffold created successfully!")
+    print("="*60)
+
+    print("\n📌 NEXT STEPS (minimal guide)\n")
+
+    print("1) Configure experiment:")
+    print(f"   👉 {config_path}")
+    print("   - change model, training, physics parameters\n")
+
+    print("2) Define problem logic:")
+    print(f"   👉 {problem_path}")
+    print("   - implement grid_sampler() if needed")
+    print("   - implement loss_fn(model, batch)\n")
+
+    print("3) (Optional) adjust API behavior:")
+    print(f"   👉 {api_path}")
+    print("   - only if you need custom model/optimizer logic\n")
+
+    print("4) Full documentation:")
+    print(f"   👉 {readme_path}\n")
+
+    print("💡 Tip:")
+    print("   Start by running training immediately.")
+    print("   Modify ONLY problem.py first unless necessary.\n")
+
+    print("="*60 + "\n")
+
+
 # --------------------------------------------------
 # CORE
 # --------------------------------------------------
@@ -150,6 +184,8 @@ def create_problem(name: str, overwrite: bool, dry_run: bool, force_git: bool):
     if force_git or confirm("Add generated files to git?"):
             git_add(created_files)
             print("[OK] added to git")
+
+    print_next_steps(problem_dir, cfg_path)
 
 
 # --------------------------------------------------
