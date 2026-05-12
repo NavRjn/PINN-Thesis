@@ -60,7 +60,7 @@ def main():
         print(f"Invalid problem: {problem}; implement api.py first.")
         return
 
-        # Create run directory
+    # Create run directory
     run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = Path("outputs") / problem / run_id
 

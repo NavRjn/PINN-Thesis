@@ -60,8 +60,8 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
         print("ERROR: ", e, e.with_traceback())
     finally:
         on_train_end(history)
-        return history
         print("Training loop completed")
+        return history
 
 
 def get_problem(problem_name, config, logger):
