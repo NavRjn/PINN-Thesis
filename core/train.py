@@ -57,7 +57,7 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
     except KeyboardInterrupt:
         print(f"\nTraining interrupted by user at {i}. Saving current state.")
     except Exception as e:
-        print("ERROR: ", e, e.with_traceback())
+        print("ERROR: ", e)
     finally:
         on_train_end(history)
         print("Training loop completed")

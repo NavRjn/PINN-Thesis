@@ -9,8 +9,12 @@ from . import utils
 
 class PNN(nn.Module):
     
-    def __init__(self, units=50, n=100, std=1, factor=1, activation=torch.tanh):
+    def __init__(self, activation=torch.tanh, **config):
         super(PNN, self).__init__()
+        n = config["n"]
+        std = config["std"]
+        factor = config["factor"]
+        units = config["units"]
         self.n = n
         self.std = std
         self.factor = factor
@@ -74,8 +78,12 @@ class PNN(nn.Module):
 
 class MHNN(nn.Module):
     
-    def __init__(self, units=50, n=100, std=1, factor=1, activation=torch.tanh):
+    def __init__(self, activation=torch.tanh, **config):
         super(MHNN, self).__init__()
+        n = config["n"]
+        std = config["std"]
+        factor = config["factor"]
+        units = config["units"]
         self.n = n
         self.std = std
         self.factor = factor
@@ -135,8 +143,11 @@ class MHNN(nn.Module):
 
 class PNN2(nn.Module):
     
-    def __init__(self, units=50, n=100, R=1, activation=torch.tanh):
+    def __init__(self, activation=torch.tanh, **config):
         super(PNN2, self).__init__()
+        n = config["n"]
+        R = config["std"]
+        units = config["units"]
         self.n = n
         self.R = R
         weights = [

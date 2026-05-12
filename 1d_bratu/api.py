@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import numpy as np
 import scipy.io as sio
 
@@ -13,6 +14,7 @@ from core.BaseProblemAPI import BaseProblemAPI
 
 from .problem import ProblemDefinition
 from .utils import plot_latent_histogram
+from . import models
 
 
 class API(BaseProblemAPI):
@@ -33,9 +35,12 @@ class API(BaseProblemAPI):
 
         self.metric_keys = self.problem.metric_keys
 
+        model = self.problem.model or self._build_model(config).to(device)
+        optim = self.problem.optimizer or self._build_optimizer(model, config)
+
         self._init_problem(
-            model=self.problem.model,
-            optimizer=self.problem.optimizer,
+            model=model,
+            optimizer=optim,
             loss_fn=self.problem.loss_fn,
             grid_sampler=self.problem.grid_sampler,
             logger=logger,
@@ -54,6 +59,8 @@ class API(BaseProblemAPI):
         fig_dir.mkdir(parents=True, exist_ok=True)
 
         iters = sorted(history["obj"].keys())
+        if len(iters)==0:
+            raise RuntimeError("Empty iters. Training seems to have failed before starting")
 
         # ------------------------------------------------------
         # Total Loss
@@ -146,7 +153,8 @@ class API(BaseProblemAPI):
         # Final Histogram
         # ------------------------------------------------------
 
-        last_iter = iters[-1]
+        print(iters)
+        last_iter = iters[-1] # if len(iters)> 0 else None
 
         final_u_mids = np.array(history["u_mid"][last_iter])
 
@@ -190,6 +198,38 @@ class API(BaseProblemAPI):
     # INTERACTIVE VISUALIZATION
     # ==========================================================
 
+    ###### PRIVATE METHODS ###############
+    def _build_model(self, config: dict) -> nn.Module:
+
+        cfg = config["model"]
+
+        model_type = cfg.get("name", "PNN")
+        units = cfg.get("units", 50)
+        std = cfg.get("std", 1.0)
+        factor = cfg.get("factor", 1.0)
+        n = cfg.get("ensemble_size", 100)
+
+        if model_type not in self.model_map:
+            raise ValueError(f"Unknown model_type: {model_type}")
+
+        model = self.model_map.get(model_type, models.PNN)(
+            n=n,
+            std=std,
+            units=units,
+            factor=factor
+        )
+
+        return model
+
+    def _build_optimizer(self, model, config: dict) -> torch.optim.Optimizer:
+
+        lr = config["training"].get("lr", 1e-3)
+
+        return torch.optim.Adam(
+            model.parameters(),
+            lr=lr
+        )
+
 
     @classmethod
     def post_process_visualize(cls, run_dir, config, device):
@@ -221,8 +261,10 @@ class API(BaseProblemAPI):
         model_cfg = config["model"]
         # Initialize the model using the registered map
         model = API.model_map[model_cfg.get("name", "PNN")](
-            units=model_cfg["units"],
-            n=model_cfg["ensemble_size"]
+            n=model_cfg.get("ensemble_size", 1000),
+            std=model_cfg.get("std", 1),
+            units=model_cfg.get("units", 50),
+            factor=model_cfg.get("factor", 1)
         ).to(device)
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
         model.eval()
