@@ -2,4 +2,4 @@ outputs/**
 *.log
 *.xml
 .idea
-*.mat
+data
