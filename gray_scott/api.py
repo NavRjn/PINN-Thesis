@@ -5,15 +5,20 @@ from core.BaseProblemAPI import BaseProblemAPI
 from .models import init_model
 from . import utils
 from .plot import plot_loss_curves, plot_batch_fields_fd, plot_resolution_convergence, plot_latent_histogram
+from .problem import ProblemDefinition
 
 
 class API(BaseProblemAPI):
 
+    metric_keys = ProblemDefinition.metric_keys
+
     def __init__(self):
         super().__init__()
-        self.metric_keys = ["grad"]  # More: "div", "residual", "latent_sensitivity", "spectral"
+        self.problem = None
 
     def setup_problem(self, config, device, logger):
+
+        self.problem = ProblemDefinition(config, device)
 
         model_cfg = config.get("model", {})
         train_cfg = config.get("training", {})
@@ -25,92 +30,11 @@ class API(BaseProblemAPI):
         use_two_models = model_cfg.get("name", "DualNet") == "DualNet"
         nz, nx = model_cfg.get("nz", 1), model_cfg.get("nx", 2)
 
-        model = init_model(arch=arch, use_two_models=use_two_models, nz=nz, nx=nx).to(device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.get("lr", 1e-4))
+        model = self.problem.model or init_model(arch=arch, use_two_models=use_two_models, nz=nz, nx=nx).to(device)
+        optimizer = self.problem.optimizer or torch.optim.Adam(model.parameters(), lr=train_cfg.get("lr", 1e-4))
+        self.problem.bind_model(model)
 
-        # 2. Setup PDE Operators
-        # AD operators require model params for functional call
-        params = dict(model.named_parameters())
-        v_laplacian, vf_x, vf_z = utils.get_ad_operators(model)
-
-        # 3. Domain/Grid Sampling Hook
-        method = train_cfg.get("method", "FD")
-        bounds = physics_cfg.get("bounds", [0, 1, 0, 1])
-        N = physics_cfg.get("grid_N", 64)
-        bz = train_cfg.get("bz", 10)
-        sigma = train_cfg.get("sigma", 2.0)
-
-        # Precompute base grid for FD
-        x_fd, _, _, dx0, dx1 = utils.get_domain_grid(bounds, N, N, device)
-
-        def grid_sampler():
-            """Generates the x and z tensors for the current iteration."""
-            z = utils.sample_z(bz, nz, sigma, device)
-
-            if method == "AD":
-                x = torch.rand(5000, nx, device=device)  # Random points for AD
-            else:  # FD
-                if train_cfg.get("move_grid", False):
-                    x = x_fd + torch.rand(1, 1, device=device) * (1 / N)
-                else:
-                    x = x_fd
-
-            x_tp, z_tp = utils.tensor_product_xz(x, z, device)
-            return {"x_tp": x_tp, "z_tp": z_tp, "z": z, "x_base": x}
-
-        # 4. Loss Function Hook (The PDE)
-        softplus = nn.Softplus(beta=10)
-
-        def loss_fn(model, batch):
-            x_tp, z_tp = batch["x_tp"], batch["z_tp"]
-            ny = model_cfg.get("ny", 2)
-
-            # Forward Pass
-            ys = model(x_tp, z_tp).reshape(bz, -1, ny)
-            y0, y1 = ys[..., 0], ys[..., 1]
-
-            # Differentials
-            if method == 'AD':
-                ys_lap = v_laplacian(params, x_tp, z_tp).reshape(bz, -1, ny)
-                y0_lap, y1_lap = ys_lap[..., 0], ys_lap[..., 1]
-                y_x = vf_x(params, x_tp, z_tp).reshape(bz, -1, ny, nx)
-                grad_norms = y_x[0].square().mean()
-            else:  # FD
-                Y0, Y1 = y0.reshape(bz, N, N), y1.reshape(bz, N, N)
-                y0_lap = utils.laplacian_conv(Y0, dx0, dx1, device).reshape(bz, -1)
-                y1_lap = utils.laplacian_conv(Y1, dx0, dx1, device).reshape(bz, -1)
-
-                Y0_x0, Y0_x1 = utils.gradient_conv(Y0, dx0, dx1, device)
-                y0_grad_norm = (Y0_x0.square() + Y0_x1.square()).mean()
-                grad_norms = y0_grad_norm / 32  # Approximation matching legacy scaling
-
-            # Physics Parameters
-            D1, D2 = physics_cfg["D1"] / (N ** 2), physics_cfg["D2"] / (N ** 2)
-            Fr, Kr = physics_cfg["Fr"], physics_cfg["Kr"]
-
-            # PDE Residuals
-            y011 = y0 * y1 * y1
-            res1 = -y011 + Fr * (1 - y0) + D1 * y0_lap
-            res2 = y011 - (Fr + Kr) * y1 + D2 * y1_lap
-
-            loss_obj = (res1.square() + res2.square()).mean()
-
-            # Regularization (Gradient Maximization)
-            if train_cfg.get("use_softclip", True):
-                loss_grad = -(-softplus(-grad_norms + 1) + 1)
-            else:
-                loss_grad = -torch.clip(grad_norms, max=1)
-
-            total_loss = loss_obj + train_cfg.get("w_grad", 1e-4) * loss_grad
-
-            metrics = {
-                "obj": loss_obj.item(),
-                self.metric_keys[0]: -loss_grad.item()
-            }
-
-            return total_loss, metrics
-
-        self._init_problem(model, optimizer, loss_fn, grid_sampler, logger, device)
+        self._init_problem(model, optimizer, self.problem.loss_fn, self.problem.grid_sampler, logger, device)
 
 
 
@@ -156,6 +80,7 @@ class API(BaseProblemAPI):
         plot_latent_histogram(history['z'], run_dir)
 
         print(f"Gray-Scott post-processing complete in {run_dir}")
+
 
 
     @classmethod
