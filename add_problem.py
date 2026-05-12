@@ -77,20 +77,20 @@ def print_next_steps(problem_dir: Path, config_path: Path):
     print("\n📌 NEXT STEPS (minimal guide)\n")
 
     print("1) Configure experiment:")
-    print(f"   👉 {config_path}")
+    print(f'   👉 "{config_path.resolve()}"')
     print("   - change model, training, physics parameters\n")
 
     print("2) Define problem logic:")
-    print(f"   👉 {problem_path}")
+    print(f'   👉 "{problem_path.resolve()}"')
     print("   - implement grid_sampler() if needed")
     print("   - implement loss_fn(model, batch)\n")
 
     print("3) (Optional) adjust API behavior:")
-    print(f"   👉 {api_path}")
+    print(f'   👉 "{api_path.resolve()}"')
     print("   - only if you need custom model/optimizer logic\n")
 
     print("4) Full documentation:")
-    print(f"   👉 {readme_path}\n")
+    print(f'   👉 "{readme_path.resolve()}\n"')
 
     print("💡 Tip:")
     print("   Start by running training immediately.")
