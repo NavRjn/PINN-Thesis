@@ -107,5 +107,5 @@ def main(config, run_dir, logger):
         save_best_loss=save_best_loss,
         on_train_end=on_train_end,
         logger=logger
-                  )
+    )
 

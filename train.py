@@ -44,15 +44,23 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--set", nargs="+")
-    parser.add_argument("--unified", action="store_true", help="Use unified training loop (if implemented)")
     args = parser.parse_args()
 
     config = load_config(args.config)
     config = deep_update(config, parse_set(args))
 
     problem = config["problem"]
+    problem_path = Path(problem)
+    if not problem_path.exists():
+        logger.error(f"Problem {problem} does not exist")
+        print(f"Invalid problem: {problem}; not found.")
+        return
+    elif not (problem_path / "api.py").exists():
+        logger.error(f"Invalid {problem} does not contain. api.py")
+        print(f"Invalid problem: {problem}; implement api.py first.")
+        return
 
-    # Create run directory
+        # Create run directory
     run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = Path("outputs") / problem / run_id
 
