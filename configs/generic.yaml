@@ -1,7 +1,7 @@
 problem: "generic_problem" # Folder name for your api.py
 
 model:
-  name: "SIREN"                # Options: PNN, SIREN, FFN, etc.
+  name: "PNN"                # Options: PNN, SIREN, FFN, etc.
   units: 128
   nz: 1                        # Number of latent/stochastic inputs
   nx: 1                        # Number of spatial inputs (x, y, t)
