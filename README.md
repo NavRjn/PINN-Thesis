@@ -31,6 +31,13 @@ A complex reaction-diffusion system that exhibits pattern formation. This implem
     *   $v_t = D_v \Delta v + uv^2 - (F+k)v$
 *   [More Info / README](gray_scott/README.md)
 
+#### Built-in visualization: Latent space interpolation:
+
+
+https://github.com/user-attachments/assets/3c78b78c-f648-4df7-b893-ed92796d3920
+
+
+
 ## Getting Started
 
 ### Installation
