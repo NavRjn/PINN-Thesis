@@ -1,6 +1,6 @@
 # Physics-Informed Neural Networks (PINNs) CLI Framework
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](Polhttps://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.3-ee4c2c)
 
