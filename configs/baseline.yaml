@@ -1,0 +1,28 @@
+problem: "gray_scott"
+
+model:
+  name: "DualNet"      # maps to use_two_models: true
+  arch: "SIREN+POSENC"
+  nz: 1                # latent dimensions
+  nx: 2                # spatial dimensions
+  ny: 2                # output dimensions
+
+training:
+  n: 100
+  lr: 0.001
+  bz: 10               # batch size for z-sampling
+  save_freq: 50        # maps to metric_every
+  method: "FD"
+  move_grid: true
+  use_softclip: false
+  w_grad: 0.0001
+  sigma: 2.0           # latent sampling spread
+  seed: 0
+
+physics:
+  D1: 0.1
+  D2: 0.05
+  Fr: 0.028
+  Kr: 0.057
+  bounds: [0, 1, 0, 1]
+  grid_N: 64           # discretization for FD
