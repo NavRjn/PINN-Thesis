@@ -1,13 +1,20 @@
 import typer
 from pathlib import Path
 from rich.console import Console
+import os
+import sys
+
+# Temporary hack to ensure CLI works when run from the root of the repo
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)
+
 from pinn.registry import (
     list_problems,
     list_runs,
     load_config,
     load_losses,
 )
-
 
 from pinn.commands.train import app as train_app
 from pinn.commands.visualize import app as viz_app

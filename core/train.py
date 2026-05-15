@@ -67,6 +67,7 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
 def get_problem(problem_name, config, logger):
     device = get_device()
     logger.info(f"Using device: {device}")
+    print(f"{problem_name}.api", Path(f"{problem_name}/api.py").resolve())
     problem = importlib.import_module(f"{problem_name}.api").API()
     problem.setup_problem(config, device, logger)
     return problem
