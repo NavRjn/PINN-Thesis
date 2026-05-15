@@ -1,9 +1,3 @@
-path = 'C:/Home Directory/Uni/Research/GINNs-Geometry-informed-Neural-Networks/models'
-import sys
-sys.path.append('../..')
-sys.path.append('../../..')
-sys.path.append(path)
-
 import torch
 from torch import nn
 from torch.nn.functional import relu, tanh
