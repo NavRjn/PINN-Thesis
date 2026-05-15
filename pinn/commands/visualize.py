@@ -1,7 +1,8 @@
 from pathlib import Path
 import typer
 
-
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CWD = Path.cwd()
 
 
 app = typer.Typer()
@@ -22,7 +23,7 @@ def discover_problems():
     """
     Dynamically discover valid problem modules.
     """
-    root = Path(".")
+    root = CWD
     problems = []
     for path in root.iterdir():
         if not path.is_dir():
@@ -153,7 +154,7 @@ def visualize_run(
 # CLI
 # =========================================================
 
-@app.callback(invoke_without_command=True)
+# @app.callback(invoke_without_command=True)
 def viz(
     problem: str = typer.Argument(None, help="Problem name"),
     run: str = typer.Option(None, "--run", help="Specific run ID",),

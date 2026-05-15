@@ -5,9 +5,13 @@ import os
 import sys
 
 # Temporary hack to ensure CLI works when run from the root of the repo
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-os.chdir(ROOT)
+REPO_ROOT = Path(__file__).resolve().parents[1]
+WORKSPACE = Path.cwd()
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(WORKSPACE) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE))
 
 from pinn.registry import (
     list_problems,
@@ -15,20 +19,32 @@ from pinn.registry import (
     load_config,
     load_losses,
 )
+# from pinn.commands.train import app as train_app
+# from pinn.commands.visualize import app as viz_app
+# from pinn.commands.add import app as add_app
+# from pinn.commands.init import app as init_app
 
-from pinn.commands.train import app as train_app
-from pinn.commands.visualize import app as viz_app
-from pinn.commands.add import app as add_app
+from pinn.commands.train import train as train_cmd
+from pinn.commands.visualize import viz as viz_cmd
+from pinn.commands.add import add as add_cmd
+from pinn.commands.init import init as init_cmd
 
-import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 app = typer.Typer()
 console = Console()
 
-app.add_typer(train_app, name="train")
-app.add_typer(viz_app, name="viz")
-app.add_typer(add_app, name="add")
+# Stay away from subapps for now.
+# app.add_typer(train_app, name="train")
+# app.add_typer(viz_app, name="viz")
+# app.add_typer(add_app, name="add")
+# app.add_typer(init_app, name="init")
+
+# Prefer direct commands for simplicity in this early stage.
+app.command()(train_cmd)
+app.command()(viz_cmd)
+app.command()(add_cmd)
+app.command()(init_cmd)
 
 
 @app.command()
@@ -37,13 +53,11 @@ def list():
     List all available problems with at least one run.
     """
     problems = list_problems()
-
     if not problems:
         console.print("No problems found.")
         return
 
     console.print("\n[bold]Available problems:[/bold]\n")
-
     for p in problems:
         runs = list_runs(p)
         console.print(f"- {p} ({len(runs)} runs)")

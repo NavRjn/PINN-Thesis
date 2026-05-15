@@ -26,3 +26,7 @@ physics:
   Kr: 0.057
   bounds: [0, 1, 0, 1]
   grid_N: 64           # discretization for FD
+
+tracking:
+  enabled: False
+  project: "pinn-dev-tests"

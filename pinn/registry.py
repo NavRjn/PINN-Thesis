@@ -2,7 +2,7 @@ from pathlib import Path
 import yaml
 import json
 
-OUTPUTS = Path("outputs")
+OUTPUTS = Path.cwd() / "outputs"
 
 
 def list_problems():

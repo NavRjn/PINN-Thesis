@@ -13,6 +13,7 @@ dependencies = [
     "typer[all]",
     "pyyaml",
     "torch",
+    "wandb",
 ]
 
 [project.scripts]
@@ -28,3 +29,6 @@ packages = [
     "pinn.commands",
     "core",
 ]
+
+[tool.setuptools.package-data]
+"pinn.templates.zero" = ["*.tpl", "*.yaml", "*.md"]

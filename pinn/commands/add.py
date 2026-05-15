@@ -2,12 +2,15 @@ from pathlib import Path
 
 import typer
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CWD = Path.cwd()
+
 # PATHS
-TEMPLATE_DIR = Path("templates/zero")
+TEMPLATE_DIR = REPO_ROOT / "pinn" / "templates" / "zero"
 
 # problem folders live at repository root
-PROBLEMS_DIR = Path(".")
-CONFIGS_DIR = Path("configs")
+PROBLEMS_DIR = CWD
+CONFIGS_DIR = CWD / "configs"
 
 app = typer.Typer()
 
@@ -171,7 +174,7 @@ def create_problem(
     print_next_steps(problem_dir, cfg_path)
 
 # CLI
-@app.callback(invoke_without_command=True)
+# @app.callback(invoke_without_command=True)
 def add(
     name: str = typer.Argument(..., help="Name of new problem"),
     overwrite: bool = typer.Option(False,"--overwrite", help="Overwrite existing files"),

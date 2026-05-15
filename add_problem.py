@@ -4,7 +4,7 @@ import shutil
 import sys
 
 
-TEMPLATE_DIR = Path("templates/zero")
+TEMPLATE_DIR = Path("pinn/templates/zero")
 PROBLEMS_DIR = Path() # Root directory for now
 CONFIGS_DIR = Path("configs")
 

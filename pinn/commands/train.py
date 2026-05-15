@@ -1,10 +1,14 @@
 import typer
 import yaml
+from pathlib import Path
 
 app = typer.Typer()
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CWD = Path.cwd()
+
 def load_config(path):
-    with open("configs/"+path, "r") as f:
+    with open(CWD / "configs" / path, "r") as f:
         return yaml.safe_load(f)
 
 def deep_update(d, u):
@@ -45,7 +49,7 @@ def train_from_config(config_name, overrides=None):
     config = deep_update(config, overrides)
 
     problem = config["problem"]
-    problem_path = Path(problem)
+    problem_path = CWD / problem
     if not problem_path.exists():
         logger.error(f"Problem {problem} does not exist")
         print(f"Invalid problem: {problem}; not found.")
@@ -57,7 +61,7 @@ def train_from_config(config_name, overrides=None):
 
     # Create run directory
     run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = Path("outputs") / problem / run_id
+    run_dir = CWD / "outputs" / problem / run_id
 
     (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
     (run_dir / "figures").mkdir(parents=True, exist_ok=True)
@@ -73,10 +77,11 @@ def train_from_config(config_name, overrides=None):
     module = import_module("core.train")
     module.main(config, run_dir, logger)
 
-@app.callback(invoke_without_command=True)
+
+# @app.callback(invoke_without_command=True)
 def train(config = typer.Argument(...,
                                   help="Path to config file relative to configs/"),
-          override_set = typer.Option(None,"--set",
+          override_set: list[str] = typer.Option(None,"--set",
                              "-s", help="Override config values, e.g. --set training.lr=0.001")
           ):
 

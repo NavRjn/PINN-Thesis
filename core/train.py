@@ -3,13 +3,14 @@ import json
 from pathlib import Path
 from tqdm import trange
 import importlib
+import wandb
 
 
 def get_device():
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
+def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None, use_wandb=False):
     pbar = trange(n_iters)
     best_loss = float("inf")
     keys = problem.get_metric_keys()
@@ -39,6 +40,10 @@ def training_loop(n_iters, problem, save_best_loss, on_train_end, logger=None):
             pbar.set_description(f"Loss: {loss.item():.2e}")
             history['obj'][i] = loss_metrics.get("obj", 0)
             if z is not None: history['z'].extend(z.detach().cpu().view(-1).tolist())
+
+            # Log to WandB if enabled
+            if use_wandb:
+                wandb.log({"train/loss": loss.item(), **{f"train/{k}": v for k, v in loss_metrics.items()}}, step=i)
 
             for key in keys:
                 key_metric = loss_metrics.get(key, []) # default as list is perhaps a problem
@@ -72,10 +77,25 @@ def get_problem(problem_name, config, logger):
     problem.setup_problem(config, device, logger)
     return problem
 
+def update_config(cfg_path):
+    # Include wandb details + git hash to the config for better traceability
+    pass
+
 
 def main(config, run_dir, logger):
     # 1. Setup Environment
     torch.manual_seed(config["training"].get("seed", 42))
+
+    # --- WandB Setup ---
+    tracking_cfg = config.get("tracking", {})
+    use_wandb = tracking_cfg.get("enabled", False)
+    if use_wandb:
+        wandb.init(
+            project=tracking_cfg.get("project", "pinn-framework"),
+            name=config.get("run", {}).get("name", Path(run_dir).name),
+            config=config,
+            dir=run_dir
+        )
 
     problem = get_problem(config['problem'], config, logger)
     model = problem.model
@@ -95,6 +115,10 @@ def main(config, run_dir, logger):
         torch.save(model.state_dict(), run_dir / "checkpoints" / "final.pt")
         with open(run_dir / "losses.json", "w") as f:
             json.dump(history, f)
+        update_config(run_dir / "config.yaml")
+        if use_wandb:
+            wandb.save(str(run_dir / "checkpoints" / "best.pt"))
+            wandb.finish()
 
         logger.info("Training completed. Running post-processing visualization.")
         problem.post_process(history, run_dir)
@@ -107,6 +131,7 @@ def main(config, run_dir, logger):
         problem=problem,
         save_best_loss=save_best_loss,
         on_train_end=on_train_end,
-        logger=logger
+        logger=logger,
+        use_wandb=use_wandb,
     )
 
